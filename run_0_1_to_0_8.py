@@ -90,7 +90,7 @@ def check_file_integrity(config: PipelineConfig, step_name: str) -> bool:
         "0.1": ["0_1_timed_dialogue.srt"],
         "0.2": ["0_2_clues.json"],
         "0.3": ["global_character_graph_llm.json"],
-        "0.4": ["0_4_calibrated_dialogue.txt", "0_4_dialogue_draft.txt"],
+        "0.4": ["0_4_calibrated_dialogue.txt"],
         "0.5": ["0_5_dialogue_turns.json"],
         "0.6": ["0_6_script_flow.json", "0_6_script_draft.md"],
         "0.7": ["0_7_script.stmf", "0_7_script_analysis.json"],
@@ -633,3 +633,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
