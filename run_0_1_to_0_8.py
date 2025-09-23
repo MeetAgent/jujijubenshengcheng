@@ -24,6 +24,13 @@ from new_pipeline.steps.step0_6_plot_extraction import Step0_6PlotExtraction
 from new_pipeline.steps.step0_7_script_writing import Step0_7ScriptWriting
 from new_pipeline.steps.step0_8_final_script import Step0_8FinalScript
 
+from nb_log import get_logger
+
+from dotenv import load_dotenv
+load_dotenv()
+
+logger = get_logger(__name__)
+
 
 class PipelineStats:
     """流水线统计信息"""
@@ -496,6 +503,10 @@ def main() -> int:
     config.config.setdefault("project", {})
     config.config["project"]["root_dir"] = output_root
     config.config["project"]["output_dir"] = output_root
+
+    # 检查输入目录，root_dir
+    logger.info(f"项目根目录: {config.project_root}, 输出目录: {config.output_dir}")
+
 
     # 互动式模式处理
     if args.interactive:
