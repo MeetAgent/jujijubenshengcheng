@@ -1,0 +1,70 @@
+# 剧集剧本生成流水线配置 v2.0
+# 支持完整的 0.1-0.8 流程，包含运行报告生成和 Token 统计
+
+# 项目配置
+project:
+  name: "剧集剧本生成流水线"
+  root_dir: ""   # 由运行脚本动态设置
+  output_dir: "" # 由运行脚本动态设置
+
+# Google Cloud Platform 配置
+gcp:
+  project_id: "gcp-genai-for-game"  # 替换为你的 GCP 项目 ID
+  location: "us-central1"           # Vertex AI 区域
+  credentials_path: "/Users/viola/Desktop/3-剧集剧本生成_new/gcp-genai-for-game-2f06b1ffa077.json"  # 服务账号密钥路径
+  bucket_name: "script-generation-videos"  # GCS 存储桶名称
+
+# 步骤配置 - 各步骤的模型和参数设置
+steps:
+  # Step0.2: 线索提取
+  step0_2:
+    model: "gemini-2.5-flash"
+    max_tokens: 65535
+    temperature: 0.1
+    thinking_budget: 0  # 思考预算：0=跳过思考提升速度，可设置0-24576
+  
+  # Step0.3: 全局对齐（LLM）
+  step0_3:
+    model: "gemini-2.5-flash"
+    max_tokens: 16384  # 适中的 token 限制
+    temperature: 0.1
+  
+  # Step0.4: 说话人校准（当前仅回填，不使用 LLM）
+  step0_4:
+    model: "gemini-2.5-flash"  # 保留配置，但当前不使用
+    max_tokens: 65535
+    temperature: 0.0
+  
+  # Step0.5: 对话轮次重构（使用最强模型）
+  step0_5:
+    model: "gemini-2.5-pro"  # 使用最强模型处理复杂任务
+    max_tokens: 65535
+    temperature: 0.1
+  
+  # Step0.6: 情节提取
+  step0_6:
+    model: "gemini-2.5-flash"
+    max_tokens: 65535
+    temperature: 0.1
+  
+  # Step0.7: 剧本撰写
+  step0_7:
+    model: "gemini-2.5-flash"
+    max_tokens: 65535
+    temperature: 0.1
+
+# 并发配置
+concurrency:
+  max_workers: 4  # 最大并发线程数
+
+# 输出格式配置
+output:
+  include_fountain: true  # 生成 Fountain 格式
+  include_fdx: true       # 生成 FDX 格式
+  include_txt: true       # 生成 TXT 格式
+
+# 报告配置
+reporting:
+  generate_execution_report: true  # 自动生成运行报告
+  include_token_stats: true        # 包含 Token 使用统计
+  include_performance_analysis: true  # 包含性能分析

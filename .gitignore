@@ -1,0 +1,12 @@
+.venv/
+<exclude>
+.git
+.idea
+.vscode
+.pytest_cache
+.tox
+.coverage
+.coverage.*
+.pytest_cache
+.pytest_cache/
+*.pyc
