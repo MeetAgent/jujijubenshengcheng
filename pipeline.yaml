@@ -11,7 +11,7 @@ project:
 gcp:
   project_id: "gcp-genai-for-game"  # 替换为你的 GCP 项目 ID
   location: "us-central1"           # Vertex AI 区域
-  credentials_path: "/Users/viola/Desktop/3-剧集剧本生成_new/gcp-genai-for-game-2f06b1ffa077.json"  # 服务账号密钥路径
+  credentials_path: "gcp-genai-for-game-2f06b1ffa077.json"  # 服务账号密钥路径
   bucket_name: "script-generation-videos"  # GCS 存储桶名称
 
 # 步骤配置 - 各步骤的模型和参数设置

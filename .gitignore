@@ -11,3 +11,6 @@
 .pytest_cache/
 *.pyc
 gcp-genai-for-game-2f06b1ffa077.json
+# Input and output，
+input/
+output/

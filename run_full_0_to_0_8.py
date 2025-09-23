@@ -15,6 +15,7 @@
 
 import os
 import sys
+from dotenv import load_dotenv
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -29,6 +30,11 @@ from new_pipeline.steps.step0_6_plot_extraction import Step0_6PlotExtraction
 from new_pipeline.steps.step0_7_script_writing import Step0_7ScriptWriting
 from new_pipeline.steps.step0_8_final_script import Step0_8FinalScript
 
+# 日志，patch了print。
+from nb_log import get_logger
+logger = get_logger(__name__)
+
+load_dotenv()  # 从 .env 文件加载环境变量（如果存在）
 
 def _fail(step: str, result) -> bool:
     status = (result or {}).get("status")
