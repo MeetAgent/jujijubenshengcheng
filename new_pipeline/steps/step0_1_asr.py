@@ -230,7 +230,7 @@ class Step0_1ASR(PipelineStep):
         print(f"开始Step0.1: 处理 {len(episodes)} 个剧集...")
         
         # 获取并行配置，支持动态调整
-        max_workers = getattr(self.config, 'max_workers', 2)  # 默认2个线程，避免API限制
+        max_workers = getattr(self.config, 'max_workers', 8)  # 默认8个线程，避免API限制
         print(f"使用 {max_workers} 个并行线程处理...")
         
         # 使用并行处理
