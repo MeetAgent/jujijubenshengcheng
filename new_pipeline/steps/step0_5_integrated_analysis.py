@@ -603,8 +603,18 @@ class Step0_5IntegratedAnalysis(PipelineStep):
         results = []
         print(f"开始Step0.5: 处理 {len(episodes)} 个剧集...")
         
-        # 获取并行配置 - 优先使用配置文件中的设置
-        max_workers = self.config.get_step_config(5).get('max_workers', 3)
+        # 获取并行配置：步骤级 -> 全局 -> 默认 3
+        step_conf = self.config.get_step_config(5) or {}
+        max_workers = step_conf.get('max_workers')
+        if max_workers is None:
+            conc_conf = getattr(self.config, 'concurrency', {}) or {}
+            max_workers = conc_conf.get('max_workers', 3)
+        try:
+            max_workers = int(max_workers)
+        except Exception:
+            max_workers = 3
+        if max_workers < 1:
+            max_workers = 1
         print(f"使用 {max_workers} 个并行线程处理...")
         
         # 使用并行处理
@@ -643,7 +653,7 @@ class Step0_5IntegratedAnalysis(PipelineStep):
         
         # 生成统计报告
         stats = self._generate_statistics(results)
-        print(f"\n📊 Step0.5 处理完成统计:")
+        print("\n📊 Step0.5 处理完成统计:")
         print(f"   总剧集数: {stats['total_episodes']}")
         print(f"   成功处理: {stats['success_count']}")
         print(f"   失败处理: {stats['failed_count']}")

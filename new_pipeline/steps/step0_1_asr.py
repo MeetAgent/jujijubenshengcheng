@@ -8,14 +8,13 @@ Step0.1: 高精度ASR与说话人分离
 
 import os
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from pydantic import BaseModel
 
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from core import PipelineConfig, GenAIClient, PipelineUtils
 from . import PipelineStep
 
 
@@ -41,17 +40,17 @@ class Step0_1ASR(PipelineStep):
     def step_name(self) -> str:
         return "asr_pre"
 
-    def check_dependencies(self, episode_id: str = None) -> bool:
+    def check_dependencies(self, episode_id: Optional[str] = None) -> bool:
         return True
 
-    def get_output_files(self, episode_id: str = None) -> List[str]:
+    def get_output_files(self, episode_id: Optional[str] = None) -> List[str]:
         if episode_id:
             return [
                 f"{episode_id}/0_1_timed_dialogue.txt"
             ]
         return []
 
-    def run(self, episode_id: str = None) -> Dict[str, Any]:
+    def run(self, episode_id: Optional[str] = None) -> Dict[str, Any]:
         if episode_id:
             return self._run_single_episode(episode_id)
         else:
@@ -84,8 +83,8 @@ class Step0_1ASR(PipelineStep):
                 video_uri = self.utils.load_text_file(legacy0_path, "").strip()
         if not video_uri:
             video_uri = self.utils.get_video_uri(episode_id, self.config.project_root)
-        # 使用与 step1 相同的模型配置（若缺失则回退 step3，再回退默认）
-        model_config = self.config.get_model_config(1)
+    # 使用与 step1 相同的模型配置（若缺失则回退 step3，再回退默认）
+    # 注：此处不直接使用返回的配置项，模型名称由下方 model_list 控制
 
         # 按照证据层级铁律优化的system instruction
         system_instruction = """你是顶级的音视频分析引擎，正在执行一个高精度的转写与说话人日志生成任务。你的唯一目标是客观、准确地记录"在什么时间、谁、说了什么"。你必须严格遵循以下的【证据层级铁律】进行判断。
@@ -189,12 +188,12 @@ class Step0_1ASR(PipelineStep):
                     print(f"⚠️ 第{attempt+1}次调用成功但解析失败，model={model_name}")
                     print(f"返回结果: {result}")
                     if attempt < max_retries + 1:  # 允许更多重试
-                        print(f"🔄 重试中...")
+                        print("🔄 重试中...")
             except Exception as e:
                 error_type = type(e).__name__
                 print(f"❌ 第{attempt+1}次调用异常 ({error_type}): {e}")
                 if attempt < max_retries + 1:  # 允许更多重试
-                    print(f"🔄 重试中...")
+                    print("🔄 重试中...")
                 else:
                     print(f"❌ {episode_id} Step0.1 最终失败: {error_type} - {e}")
                     result = {"text": ""}
@@ -229,8 +228,20 @@ class Step0_1ASR(PipelineStep):
         results = []
         print(f"开始Step0.1: 处理 {len(episodes)} 个剧集...")
         
-        # 获取并行配置，支持动态调整
-        max_workers = getattr(self.config, 'max_workers', 8)  # 默认8个线程，避免API限制
+        # 获取并行配置，支持从 YAML 配置读取
+        # 优先：steps.step0_1.max_workers -> 其次：concurrency.max_workers -> 默认 4
+        step_conf = self.config.get_step_config_by_name('step0_1') or {}
+        max_workers = step_conf.get('max_workers')
+        if max_workers is None:
+            conc_conf = getattr(self.config, 'concurrency', {}) or {}
+            max_workers = conc_conf.get('max_workers', 4)
+        # 类型与范围保护
+        try:
+            max_workers = int(max_workers)
+        except Exception:
+            max_workers = 4
+        if max_workers < 1:
+            max_workers = 1
         print(f"使用 {max_workers} 个并行线程处理...")
         
         # 使用并行处理
@@ -258,7 +269,7 @@ class Step0_1ASR(PipelineStep):
         
         # 生成统计报告
         stats = self._generate_statistics(results)
-        print(f"\n📊 Step0.1 处理完成统计:")
+        print("\n📊 Step0.1 处理完成统计:")
         print(f"   总剧集数: {stats['total_episodes']}")
         print(f"   成功处理: {stats['success_count']}")
         print(f"   失败处理: {stats['failed_count']}")

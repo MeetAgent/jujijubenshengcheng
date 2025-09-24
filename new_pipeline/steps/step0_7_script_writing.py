@@ -1268,10 +1268,13 @@ class Step0_7ScriptWriting(PipelineStep):
         
         print(f"开始Step0.7: 处理 {len(episodes)} 个剧集...")
         
-        # 获取并行配置
+        # 获取并行配置：步骤级 -> 全局 -> 默认 3
         step_conf_exact = self._get_this_step_config()
-        max_workers = (step_conf_exact.get('max_workers')
-                       if step_conf_exact else self.config.get_step_config_by_name('step0_7').get('max_workers', 3))
+        if step_conf_exact and 'max_workers' in step_conf_exact:
+            max_workers = step_conf_exact.get('max_workers')
+        else:
+            conc_conf = getattr(self.config, 'concurrency', {}) or {}
+            max_workers = conc_conf.get('max_workers', 3)
         # 环境变量覆盖
         try:
             env_val = os.environ.get('STEP0_7_MAX_WORKERS')
@@ -1279,6 +1282,11 @@ class Step0_7ScriptWriting(PipelineStep):
                 max_workers = int(env_val)
         except Exception:
             pass
+        # 类型与范围保护
+        try:
+            max_workers = int(max_workers)
+        except Exception:
+            max_workers = 3
         if not max_workers or max_workers < 1:
             max_workers = 1
         print(f"使用 {max_workers} 个并行线程处理...")

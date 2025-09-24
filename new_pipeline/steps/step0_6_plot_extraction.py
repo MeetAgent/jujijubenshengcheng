@@ -740,10 +740,13 @@ class Step0_6PlotExtraction(PipelineStep):
         
         print(f"开始Step0.6: 处理 {len(episodes)} 个剧集...")
         
-        # 获取并行配置
+        # 获取并行配置：步骤级 -> 全局 -> 默认 3
         step_conf_exact = self._get_this_step_config()
-        max_workers = (step_conf_exact.get('max_workers')
-                       if step_conf_exact else self.config.get_step_config(6).get('max_workers', 3))
+        if step_conf_exact and 'max_workers' in step_conf_exact:
+            max_workers = step_conf_exact.get('max_workers')
+        else:
+            conc_conf = getattr(self.config, 'concurrency', {}) or {}
+            max_workers = conc_conf.get('max_workers', 3)
         # 环境变量覆盖
         try:
             env_val = os.environ.get('STEP0_6_MAX_WORKERS')
@@ -751,6 +754,11 @@ class Step0_6PlotExtraction(PipelineStep):
                 max_workers = int(env_val)
         except Exception:
             pass
+        # 类型与范围保护
+        try:
+            max_workers = int(max_workers)
+        except Exception:
+            max_workers = 3
         if not max_workers or max_workers < 1:
             max_workers = 1
         print(f"使用 {max_workers} 个并行线程处理...")
@@ -779,7 +787,7 @@ class Step0_6PlotExtraction(PipelineStep):
         
         # 生成统计报告
         stats = self._generate_statistics(results)
-        print(f"\n📊 Step0.6 处理完成统计:")
+        print("\n📊 Step0.6 处理完成统计:")
         print(f"   总剧集数: {stats['total_episodes']}")
         print(f"   成功处理: {stats['success_count']}")
         print(f"   已存在: {stats['already_exists_count']}")

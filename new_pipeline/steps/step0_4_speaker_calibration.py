@@ -66,7 +66,18 @@ class Step0_4SpeakerCalibration(PipelineStep):
         results = []
         print(f"开始{self.step_name}: 处理 {len(episodes)} 个剧集...")
         
-        max_workers = getattr(self.config, 'max_workers', 2)
+        # 并发配置：步骤级 -> 全局 -> 默认 2
+        step_conf = self.config.get_step_config_by_name('step0_4') or {}
+        max_workers = step_conf.get('max_workers')
+        if max_workers is None:
+            conc_conf = getattr(self.config, 'concurrency', {}) or {}
+            max_workers = conc_conf.get('max_workers', 2)
+        try:
+            max_workers = int(max_workers)
+        except Exception:
+            max_workers = 2
+        if max_workers < 1:
+            max_workers = 1
         print(f"使用 {max_workers} 个并行线程处理...")
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -203,6 +214,7 @@ class Step0_4SpeakerCalibration(PipelineStep):
         # 1. 优先尝试读取当集独立的 0_3_speaker_hints.csv
         if episode_id:
             ep_hints_csv = os.path.join(self.config.project_root, episode_id, '0_3_speaker_hints.csv')
+            
             if os.path.exists(ep_hints_csv):
                 try:
                     import csv
@@ -256,6 +268,7 @@ class Step0_4SpeakerCalibration(PipelineStep):
                     return "\n".join(summary_lines)
                 except Exception as e:
                     print(f"⚠️ 读取当集文件失败: {e}")
+            return False
         
         # 2. 回退到全局图谱
         if not self.global_graph:

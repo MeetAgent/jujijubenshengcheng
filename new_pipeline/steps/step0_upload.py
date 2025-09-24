@@ -179,7 +179,18 @@ class Step0Upload(PipelineStep):
         results = []
         # 将集合名传递给子调用
         os.environ['STEP0_OUT_COLLECTION'] = collection_name
-        max_workers = self.config.get_step_config(0).get('max_workers', 2)  # 降低并发数，减少网络压力
+        # 并发配置：步骤级 -> 全局 -> 默认 2（保持较低并发，减少网络压力）
+        step_conf = self.config.get_step_config(0) or {}
+        max_workers = step_conf.get('max_workers')
+        if max_workers is None:
+            conc_conf = getattr(self.config, 'concurrency', {}) or {}
+            max_workers = conc_conf.get('max_workers', 2)
+        try:
+            max_workers = int(max_workers)
+        except Exception:
+            max_workers = 2
+        if max_workers < 1:
+            max_workers = 1
         # 第一轮上传
         print("🚀 开始第一轮上传...")
         results = self._upload_episodes_batch(episodes, max_workers)
