@@ -15,6 +15,8 @@ from core import PipelineConfig, GenAIClient, PipelineUtils
 from core.exceptions import StepDependencyError, ModelCallError
 from . import PipelineStep
 
+from new_pipeline.steps.commont_log import log
+
 class PlotBeat(BaseModel):
     """情节节点"""
     beat_id: str
@@ -118,7 +120,7 @@ class Step0_6PlotExtraction(PipelineStep):
                 ep_dir = self.utils.get_episode_output_dir(self.config.output_dir, ep)
                 dialogue_turns_file = os.path.join(ep_dir, "0_5_dialogue_turns.json")
                 if not os.path.exists(dialogue_turns_file):
-                    print(f"缺少依赖文件: {dialogue_turns_file}")
+                    log.info(f"缺少依赖文件: {dialogue_turns_file}")
                     return False
             return True
     
@@ -141,7 +143,7 @@ class Step0_6PlotExtraction(PipelineStep):
     def _run_single_episode(self, episode_id: str) -> Dict[str, Any]:
         """处理单个剧集"""
         start_time = time.time()
-        print(f"Step0.6: 处理 {episode_id}")
+        log.info(f"Step0.6: 处理 {episode_id}")
         
         # 检查是否已经存在输出文件（仅保留script_flow/script_draft）
         episode_out_dir = self.utils.get_episode_output_dir(self.config.output_dir, episode_id)
@@ -149,7 +151,7 @@ class Step0_6PlotExtraction(PipelineStep):
         md_output_file = os.path.join(episode_out_dir, "0_6_script_draft.md")
         
         if os.path.exists(json_output_file) and os.path.exists(md_output_file) and not os.environ.get("FORCE_OVERWRITE"):
-            print(f"✅ {episode_id} 已有Step0.6输出文件，跳过处理")
+            log.info(f"✅ {episode_id} 已有Step0.6输出文件，跳过处理")
             return {"status": "already_exists"}
         
         # 读取Step0.5结果
@@ -157,14 +159,14 @@ class Step0_6PlotExtraction(PipelineStep):
         dialogue_turns_file = os.path.join(episode_out_dir, "0_5_dialogue_turns.json")
         
         if not os.path.exists(dialogue_turns_file):
-            print(f"Warning: 未找到 {episode_id} 的对话轮次文件")
+            log.info(f"Warning: 未找到 {episode_id} 的对话轮次文件")
             return {"status": "failed", "error": "缺少对话轮次文件"}
         
         dialogue_data = self.utils.load_json_file(dialogue_turns_file, {})
         dialogue_turns = dialogue_data.get("dialogue_turns", [])
         
         if not dialogue_turns:
-            print(f"Warning: {episode_id} 没有对话轮次数据")
+            log.info(f"Warning: {episode_id} 没有对话轮次数据")
             return {"status": "failed", "error": "没有对话轮次数据"}
         
         # 获取视频URI
@@ -236,7 +238,7 @@ class Step0_6PlotExtraction(PipelineStep):
             self.utils.save_text_file(md_output_file, script_md)
 
             processing_time = time.time() - start_time
-            print(f"✅ {episode_id} Step0.6 完成 (用时: {processing_time:.2f}秒)")
+            log.info(f"✅ {episode_id} Step0.6 完成 (用时: {processing_time:.2f}秒)")
 
             return {
                 "status": "success",
@@ -247,7 +249,7 @@ class Step0_6PlotExtraction(PipelineStep):
             }
 
         except Exception as e:
-            print(f"❌ {episode_id} Step0.6 失败: {e}")
+            log.info(f"❌ {episode_id} Step0.6 失败: {e}")
             return {"status": "failed", "error": str(e)}
     
     # (已移除未使用的情节结构提取大Prompt与对应验证方法)
@@ -414,6 +416,9 @@ class Step0_6PlotExtraction(PipelineStep):
             max_tokens=model_config.get('max_tokens', 65535),
             temperature=model_config.get('temperature', 0.1)
         )
+
+        # debug, 记录LLM原始输出
+        log.debug(f"LLM raw result for {episode_id}: {result}")
 
         return self._normalize_script_flow(result, episode_id)
 
@@ -738,7 +743,7 @@ class Step0_6PlotExtraction(PipelineStep):
         episodes = self.utils.get_episode_list(self.config.project_root)
         results = []
         
-        print(f"开始Step0.6: 处理 {len(episodes)} 个剧集...")
+        log.info(f"开始Step0.6: 处理 {len(episodes)} 个剧集...")
         
         # 获取并行配置：步骤级 -> 全局 -> 默认 3
         step_conf_exact = self._get_this_step_config()
@@ -761,7 +766,7 @@ class Step0_6PlotExtraction(PipelineStep):
             max_workers = 3
         if not max_workers or max_workers < 1:
             max_workers = 1
-        print(f"使用 {max_workers} 个并行线程处理...")
+        log.info(f"使用 {max_workers} 个并行线程处理...")
         
         # 使用并行处理
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -778,7 +783,7 @@ class Step0_6PlotExtraction(PipelineStep):
                     result = future.result()
                     results.append(result)
                 except Exception as e:
-                    print(f"Step0.6 处理 {episode_id} 失败: {e}")
+                    log.info(f"Step0.6 处理 {episode_id} 失败: {e}")
                     results.append({
                         "episode_id": episode_id, 
                         "status": "failed", 
@@ -787,16 +792,16 @@ class Step0_6PlotExtraction(PipelineStep):
         
         # 生成统计报告
         stats = self._generate_statistics(results)
-        print("\n📊 Step0.6 处理完成统计:")
-        print(f"   总剧集数: {stats['total_episodes']}")
-        print(f"   成功处理: {stats['success_count']}")
-        print(f"   已存在: {stats['already_exists_count']}")
-        print(f"   失败: {stats['failed_count']}")
-        print(f"   总场景数: {stats['total_scenes']}")
-        print(f"   总情节节点数: {stats['total_beats']}")
-        print(f"   总处理时间: {stats['total_processing_time']} 秒")
-        print(f"   平均处理时间: {stats['avg_processing_time']} 秒/episode")
-        print(f"   并行线程数: {max_workers}")
+        log.info("\n📊 Step0.6 处理完成统计:")
+        log.info(f"   总剧集数: {stats['total_episodes']}")
+        log.info(f"   成功处理: {stats['success_count']}")
+        log.info(f"   已存在: {stats['already_exists_count']}")
+        log.info(f"   失败: {stats['failed_count']}")
+        log.info(f"   总场景数: {stats['total_scenes']}")
+        log.info(f"   总情节节点数: {stats['total_beats']}")
+        log.info(f"   总处理时间: {stats['total_processing_time']} 秒")
+        log.info(f"   平均处理时间: {stats['avg_processing_time']} 秒/episode")
+        log.info(f"   并行线程数: {max_workers}")
         
         return {
             "status": "completed",

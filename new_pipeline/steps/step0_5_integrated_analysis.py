@@ -22,6 +22,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core import PipelineConfig, GenAIClient, PipelineUtils
 from . import PipelineStep
 
+from new_pipeline.steps.commont_log import log
+
 
 class DialogueTurn(BaseModel):
     """对话轮次模型"""
@@ -191,7 +193,7 @@ class Step0_5IntegratedAnalysis(PipelineStep):
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
-                    print(f"🔄 第{attempt+1}次重试融合分析...")
+                    log.info(f"🔄 第{attempt+1}次重试融合分析...")
                 
                 result = self.client.generate_content(
                     model=model_name,
@@ -202,6 +204,9 @@ class Step0_5IntegratedAnalysis(PipelineStep):
                     system_instruction=system_instruction,
                     schema=schema
                 )
+
+                # debug: 打印完整响应内容
+                log.debug(f"融合分析响应: {result}")
                 
                 # 验证输出
                 if self._validate_output(result):
@@ -209,14 +214,14 @@ class Step0_5IntegratedAnalysis(PipelineStep):
                     correction_count = result.get('metadata', {}).get('correction_count', 0)
                     reconstruction_count = result.get('metadata', {}).get('reconstruction_count', 0)
                     
-                    print(f"✅ 融合分析成功，生成 {turns_count} 个对话轮次，"
+                    log.info(f"✅ 融合分析成功，生成 {turns_count} 个对话轮次，"
                           f"纠错 {correction_count} 次，重构 {reconstruction_count} 次")
                     return result
                 else:
-                    print(f"⚠️ 第{attempt+1}次调用输出验证失败")
+                    log.info(f"⚠️ 第{attempt+1}次调用输出验证失败")
                     
             except Exception as e:
-                print(f"❌ 第{attempt+1}次融合分析失败: {e}")
+                log.info(f"❌ 第{attempt+1}次融合分析失败: {e}")
                 if attempt == max_retries - 1:
                     raise e
         
@@ -329,7 +334,7 @@ class Step0_5IntegratedAnalysis(PipelineStep):
     def _fallback_processing(self, calibrated_content: str, character_summary: str, 
                            episode_id: str) -> Dict[str, Any]:
         """回退处理：分步处理模式"""
-        print(f"🔄 {episode_id} 使用回退处理模式")
+        log.info(f"🔄 {episode_id} 使用回退处理模式")
         
         # 简化的分步处理
         # 这里可以调用现有的Step0.4逻辑，然后添加简单的分析
@@ -363,7 +368,7 @@ class Step0_5IntegratedAnalysis(PipelineStep):
             }
             
         except Exception as e:
-            print(f"❌ 回退处理也失败: {e}")
+            log.info(f"❌ 回退处理也失败: {e}")
             return {
                 "dialogue_turns": [],
                 "metadata": {
@@ -434,7 +439,7 @@ class Step0_5IntegratedAnalysis(PipelineStep):
             return True
             
         except Exception as e:
-            print(f"⚠️ 输出验证失败: {e}")
+            log.info(f"⚠️ 输出验证失败: {e}")
             return False
 
     def _build_character_summary(self, episode_id: str) -> str:
@@ -453,7 +458,7 @@ class Step0_5IntegratedAnalysis(PipelineStep):
             return "无角色信息"
             
         except Exception as e:
-            print(f"⚠️ 构建角色摘要失败: {e}")
+            log.info(f"⚠️ 构建角色摘要失败: {e}")
             return "无角色信息"
 
     def _load_character_summary_from_csv(self, csv_file: str) -> str:
@@ -476,7 +481,7 @@ class Step0_5IntegratedAnalysis(PipelineStep):
             return "\n".join(characters) if characters else "无角色信息"
             
         except Exception as e:
-            print(f"⚠️ 从CSV加载角色摘要失败: {e}")
+            log.info(f"⚠️ 从CSV加载角色摘要失败: {e}")
             return "无角色信息"
 
     def _load_character_summary_from_global(self, global_file: str, episode_id: str) -> str:
@@ -504,7 +509,7 @@ class Step0_5IntegratedAnalysis(PipelineStep):
             return "无角色信息"
             
         except Exception as e:
-            print(f"⚠️ 从全局文件加载角色摘要失败: {e}")
+            log.info(f"⚠️ 从全局文件加载角色摘要失败: {e}")
             return "无角色信息"
 
     def _get_video_uri(self, episode_id: str) -> str:
@@ -524,7 +529,7 @@ class Step0_5IntegratedAnalysis(PipelineStep):
             return self.utils.get_video_uri(episode_id, self.config.project_root)
             
         except Exception as e:
-            print(f"⚠️ 获取视频URI失败: {e}")
+            log.info(f"⚠️ 获取视频URI失败: {e}")
             return ""
 
     def _save_results(self, result: Dict[str, Any], turns_file: str, 
@@ -541,7 +546,7 @@ class Step0_5IntegratedAnalysis(PipelineStep):
                 f.write(summary)
                 
         except Exception as e:
-            print(f"⚠️ 保存结果失败: {e}")
+            log.info(f"⚠️ 保存结果失败: {e}")
 
     def _generate_analysis_summary(self, result: Dict[str, Any], episode_id: str) -> str:
         """生成分析摘要"""
@@ -601,7 +606,7 @@ class Step0_5IntegratedAnalysis(PipelineStep):
         """处理所有剧集"""
         episodes = self.utils.get_episode_list(self.config.project_root)
         results = []
-        print(f"开始Step0.5: 处理 {len(episodes)} 个剧集...")
+        log.info(f"开始Step0.5: 处理 {len(episodes)} 个剧集...")
         
         # 获取并行配置：步骤级 -> 全局 -> 默认 3
         step_conf = self.config.get_step_config(5) or {}
@@ -615,7 +620,7 @@ class Step0_5IntegratedAnalysis(PipelineStep):
             max_workers = 3
         if max_workers < 1:
             max_workers = 1
-        print(f"使用 {max_workers} 个并行线程处理...")
+        log.info(f"使用 {max_workers} 个并行线程处理...")
         
         # 使用并行处理
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -635,16 +640,16 @@ class Step0_5IntegratedAnalysis(PipelineStep):
                     
                     # 实时显示处理结果
                     if result.get("status") == "success":
-                        print(f"✅ {episode_id}: {result.get('turns_count', 0)} 轮对话, "
+                        log.info(f"✅ {episode_id}: {result.get('turns_count', 0)} 轮对话, "
                               f"纠错 {result.get('correction_count', 0)} 次, "
                               f"重构 {result.get('reconstruction_count', 0)} 次")
                     elif result.get("status") == "already_exists":
-                        print(f"⏭️ {episode_id}: 已存在，跳过处理")
+                        log.info(f"⏭️ {episode_id}: 已存在，跳过处理")
                     else:
-                        print(f"❌ {episode_id}: 处理失败")
+                        log.info(f"❌ {episode_id}: 处理失败")
                         
                 except Exception as e:
-                    print(f"❌ Step0.5 处理 {episode_id} 失败: {e}")
+                    log.info(f"❌ Step0.5 处理 {episode_id} 失败: {e}")
                     results.append({
                         "episode_id": episode_id, 
                         "status": "failed", 
@@ -653,18 +658,18 @@ class Step0_5IntegratedAnalysis(PipelineStep):
         
         # 生成统计报告
         stats = self._generate_statistics(results)
-        print("\n📊 Step0.5 处理完成统计:")
-        print(f"   总剧集数: {stats['total_episodes']}")
-        print(f"   成功处理: {stats['success_count']}")
-        print(f"   失败处理: {stats['failed_count']}")
-        print(f"   成功率: {stats['success_rate']:.1f}%")
-        print(f"   总对话轮次: {stats['total_turns']}")
-        print(f"   平均对话轮次: {stats['avg_turns']:.1f}")
-        print(f"   总纠错次数: {stats['total_corrections']}")
-        print(f"   总重构次数: {stats['total_reconstructions']}")
-        print(f"   总处理时间: {stats['total_processing_time']} 秒")
-        print(f"   平均处理时间: {stats['avg_processing_time']} 秒/episode")
-        print(f"   并行线程数: {max_workers}")
+        log.info("\n📊 Step0.5 处理完成统计:")
+        log.info(f"   总剧集数: {stats['total_episodes']}")
+        log.info(f"   成功处理: {stats['success_count']}")
+        log.info(f"   失败处理: {stats['failed_count']}")
+        log.info(f"   成功率: {stats['success_rate']:.1f}%")
+        log.info(f"   总对话轮次: {stats['total_turns']}")
+        log.info(f"   平均对话轮次: {stats['avg_turns']:.1f}")
+        log.info(f"   总纠错次数: {stats['total_corrections']}")
+        log.info(f"   总重构次数: {stats['total_reconstructions']}")
+        log.info(f"   总处理时间: {stats['total_processing_time']} 秒")
+        log.info(f"   平均处理时间: {stats['avg_processing_time']} 秒/episode")
+        log.info(f"   并行线程数: {max_workers}")
         
         return {
             "status": "completed", 

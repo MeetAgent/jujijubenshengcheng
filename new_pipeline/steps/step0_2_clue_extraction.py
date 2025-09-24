@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from typing import Dict, List, Any
 import json
-
+from new_pipeline.steps.commont_log import log
 
 class Step0_2ClueExtraction(PipelineStep):
     """分集角色与关系线索提取步骤"""
@@ -43,7 +43,7 @@ class Step0_2ClueExtraction(PipelineStep):
         episodes = self.utils.get_episode_list(self.config.project_root)
         episodes = sorted(episodes)
         results = []
-        print(f"开始{self.step_name}: 串行处理 {len(episodes)} 个剧集...")
+        log.info(f"开始{self.step_name}: 串行处理 {len(episodes)} 个剧集...")
 
         # 确保先验文件存在
         prior = self._load_prior()
@@ -57,7 +57,7 @@ class Step0_2ClueExtraction(PipelineStep):
                 self._merge_prior(prior, episode_id)
                 self._save_prior(prior)
             except Exception as e:
-                print(f"❌ {self.step_name} 处理 {episode_id} 失败: {e}")
+                log.info(f"❌ {self.step_name} 处理 {episode_id} 失败: {e}")
                 results.append({
                     "episode_id": episode_id, 
                     "status": "failed", 
@@ -65,11 +65,11 @@ class Step0_2ClueExtraction(PipelineStep):
                 })
 
         stats = self._generate_statistics(results)
-        print(f"\n📊 {self.step_name} 处理完成统计:")
-        print(f"   总剧集数: {stats['total_episodes']}")
-        print(f"   成功处理: {stats['success_count']}")
-        print(f"   失败处理: {stats['failed_count']}")
-        print(f"   成功率: {stats['success_rate']:.1f}%")
+        log.info(f"\n📊 {self.step_name} 处理完成统计:")
+        log.info(f"   总剧集数: {stats['total_episodes']}")
+        log.info(f"   成功处理: {stats['success_count']}")
+        log.info(f"   失败处理: {stats['failed_count']}")
+        log.info(f"   成功率: {stats['success_rate']:.1f}%")
 
         return {
             "status": "completed", 
@@ -79,12 +79,12 @@ class Step0_2ClueExtraction(PipelineStep):
     
     def _run_single_episode(self, episode_id: str, prior: Dict[str, Any] = None) -> Dict[str, Any]:
         """处理单个剧集（在构建prompt时注入先验）"""
-        print(f"{self.step_name}: 处理 {episode_id}")
+        log.info(f"{self.step_name}: 处理 {episode_id}")
         
         # 检查是否已有输出文件
         output_file = f"{self.config.project_root}/{episode_id}/0_2_clues.json"
         if os.path.exists(output_file) and not os.getenv('FORCE_OVERWRITE'):
-            print(f"✅ {episode_id} 已有{self.step_name}输出文件，跳过处理")
+            log.info(f"✅ {episode_id} 已有{self.step_name}输出文件，跳过处理")
             return {"status": "already_exists"}
         
         # 检查输入文件（优先SRT，兼容旧版TXT）
@@ -92,7 +92,7 @@ class Step0_2ClueExtraction(PipelineStep):
         asr_txt = f"{self.config.project_root}/{episode_id}/0_1_timed_dialogue.txt"
         asr_file = asr_srt if os.path.exists(asr_srt) else (asr_txt if os.path.exists(asr_txt) else None)
         if not asr_file:
-            print(f"❌ {episode_id} 缺少ASR输入文件: {asr_srt} 或 {asr_txt}")
+            log.info(f"❌ {episode_id} 缺少ASR输入文件: {asr_srt} 或 {asr_txt}")
             return {"status": "failed", "error": "缺少ASR输入文件"}
         
         # 获取视频URI
@@ -107,7 +107,7 @@ class Step0_2ClueExtraction(PipelineStep):
         
         # 思考预算配置（0表示跳过思考，提升速度）
         thinking_budget = model_config.get("thinking_budget", 0)
-        print(f"🧠 思考预算配置: {thinking_budget} (0=跳过思考，提升速度)")
+        log.info(f"🧠 思考预算配置: {thinking_budget} (0=跳过思考，提升速度)")
         
         # 构建prompt
         system_instruction = """你是影视剧分析的AI助手，正在执行大规模分析任务的第一步。
@@ -247,10 +247,10 @@ ASR对话内容：
                     model_name = model_list[0]  # 使用主模型
                 else:
                     model_name = model_list[attempt - max_retries + 1]  # 切换备用模型
-                    print(f"🔄 第{attempt+1}次重试，切换模型: {model_name}")
+                    log.info(f"🔄 第{attempt+1}次重试，切换模型: {model_name}")
                 
                 if attempt > 0:
-                    print(f"🔄 第{attempt+1}次重试，使用模型: {model_name}")
+                    log.info(f"🔄 第{attempt+1}次重试，使用模型: {model_name}")
                     import time
                     time.sleep(retry_delay * min(attempt, 3))  # 最大延迟6秒
                 
@@ -264,23 +264,25 @@ ASR对话内容：
                     schema=schema,
                     thinking_budget=thinking_budget
                 )
+                # 调试输出大模型的返回
+                log.debug(result)
                 
                 # 解析结果
                 if isinstance(result, dict) and result.get("episode_id"):
-                    print(f"✅ 第{attempt+1}次调用成功，提取到线索")
+                    log.info(f"✅ 第{attempt+1}次调用成功，提取到线索")
                     break
                 else:
-                    print(f"⚠️ 第{attempt+1}次调用成功但解析失败，model={model_name}")
-                    print(f"返回结果: {result}")
+                    log.warning(f"⚠️ 第{attempt+1}次调用成功但解析失败，model={model_name}")
+                    log.warning(f"返回结果: {result}")
                     if attempt < max_retries + 1:  # 允许更多重试
-                        print(f"🔄 重试中...")
+                        log.info(f"🔄 重试中...")
             except Exception as e:
                 error_type = type(e).__name__
-                print(f"❌ 第{attempt+1}次调用异常 ({error_type}): {e}")
+                log.info(f"❌ 第{attempt+1}次调用异常 ({error_type}): {e}")
                 if attempt < max_retries + 1:  # 允许更多重试
-                    print(f"🔄 重试中...")
+                    log.info(f"🔄 重试中...")
                 else:
-                    print(f"❌ {episode_id} {self.step_name} 最终失败: {error_type} - {e}")
+                    log.info(f"❌ {episode_id} {self.step_name} 最终失败: {error_type} - {e}")
                     result = {"episode_id": episode_id, "explicit_characters": [], "speaker_profiles": [], "relationship_clues": []}
         
         # 确保episode_id正确
@@ -289,7 +291,7 @@ ASR对话内容：
         
         # 保存结果
         self.utils.save_json_file(output_file, result, ensure_ascii=False)
-        print(f"✅ {episode_id} {self.step_name} 完成")
+        log.info(f"✅ {episode_id} {self.step_name} 完成")
         
         return {
             "status": "success",
@@ -305,7 +307,7 @@ ASR对话内容：
                 with open(self.prior_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
             except Exception as e:
-                print(f"⚠️ 加载先验失败，将使用空先验: {e}")
+                log.info(f"⚠️ 加载先验失败，将使用空先验: {e}")
         return {
             "version": 1,
             "updated_at": "",
@@ -320,7 +322,7 @@ ASR对话内容：
             prior["updated_at"] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
             self.utils.save_json_file(self.prior_file, prior, ensure_ascii=False)
         except Exception as e:
-            print(f"⚠️ 保存先验失败: {e}")
+            log.info(f"⚠️ 保存先验失败: {e}")
 
     def _render_prior_text(self, prior: Dict[str, Any]) -> str:
         """将先验渲染为短文本注入Prompt"""
@@ -351,7 +353,7 @@ ASR对话内容：
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
         except Exception as e:
-            print(f"⚠️ 读取本集线索失败，跳过先验合并: {e}")
+            log.info(f"⚠️ 读取本集线索失败，跳过先验合并: {e}")
             return
 
         characters = prior.setdefault("characters", [])
@@ -426,4 +428,4 @@ if __name__ == "__main__":
     config = PipelineConfig()
     step = Step0_2ClueExtraction(config)
     result = step.run()
-    print(f"最终结果: {result}")
+    log.info(f"最终结果: {result}")

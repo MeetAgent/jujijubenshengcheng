@@ -11,6 +11,8 @@ from typing import Dict, Any, List
 from core import PipelineConfig, GenAIClient, PipelineUtils
 from . import PipelineStep
 
+from new_pipeline.steps.commont_log import log
+
 class Step0_8FinalScript(PipelineStep):
     """Step0.8: 最终剧本生成"""
     
@@ -30,7 +32,7 @@ class Step0_8FinalScript(PipelineStep):
                 self.config.output_dir, ep, "0_7_script.stmf"
             )
             if not os.path.exists(stmf_file):
-                print(f"缺少依赖文件: {stmf_file}")
+                log.info(f"缺少依赖文件: {stmf_file}")
                 return False
         return True
     
@@ -44,25 +46,25 @@ class Step0_8FinalScript(PipelineStep):
     
     def run(self, episode_id: str = None) -> Dict[str, Any]:
         if episode_id:
-            print("⚠️  Step0.8不支持单剧集处理，将处理所有剧集")
+            log.info("⚠️  Step0.8不支持单剧集处理，将处理所有剧集")
         return self._run_merge_and_convert()
     
     def _run_merge_and_convert(self) -> Dict[str, Any]:
-        print("Step0.8: 合并与导出最终剧本")
+        log.info("Step0.8: 合并与导出最终剧本")
         output_dir = self.config.output_dir
         out_stmf = os.path.join(output_dir, "0_8_merged_script.stmf")
         out_fountain = os.path.join(output_dir, "0_8_complete_screenplay.fountain")
         out_fdx = os.path.join(output_dir, "0_8_complete_screenplay.fdx")
         
         if all(os.path.exists(p) for p in [out_stmf, out_fountain, out_fdx]) and not os.environ.get("FORCE_OVERWRITE"):
-            print("✅ Step0.8输出已存在，跳过处理")
+            log.info("✅ Step0.8输出已存在，跳过处理")
             return {"status": "already_exists"}
         
         try:
             # 1) 收集0_7产物
             stmf_files = self._collect_step07_stmf()
             if not stmf_files:
-                print("Warning: 未找到任何0_7_script.stmf")
+                log.info("Warning: 未找到任何0_7_script.stmf")
                 return {"status": "no_files"}
             
             # 2) 合并
@@ -79,10 +81,10 @@ class Step0_8FinalScript(PipelineStep):
             self.utils.save_text_file(out_fdx, fdx_script)
             
             scenes_count = len([line for line in merged_content.split('\n') if line.strip().startswith('SCENE')])
-            print("✅ Step0.8 完成（已生成 STMF、Fountain 与 FDX）")
+            log.info("✅ Step0.8 完成（已生成 STMF、Fountain 与 FDX）")
             return {"status": "completed", "episodes_count": len(stmf_files), "scenes_count": scenes_count}
         except Exception as e:
-            print(f"❌ Step0.8 失败: {e}")
+            log.info(f"❌ Step0.8 失败: {e}")
             return {"status": "failed", "error": str(e)}
     
     def _collect_step07_stmf(self) -> List[str]:
@@ -117,9 +119,9 @@ class Step0_8FinalScript(PipelineStep):
                         all_content.append(episode_header + c)
                     else:
                         all_content.append(c)
-                    print(f"加载: {episode_dir}")
+                    log.info(f"加载: {episode_dir}")
             except Exception as e:
-                print(f"Warning: 无法加载 {p}: {e}")
+                log.info(f"Warning: 无法加载 {p}: {e}")
         if not all_content:
             raise Exception("没有成功加载任何0_7_script.stmf")
         return "\n\n".join(all_content)

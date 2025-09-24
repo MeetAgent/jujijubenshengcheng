@@ -14,6 +14,8 @@ from core import PipelineConfig, GenAIClient, PipelineUtils
 from core.exceptions import StepDependencyError, ModelCallError
 from . import PipelineStep
 
+from new_pipeline.steps.commont_log import log
+
 class ScriptScene(BaseModel):
     """剧本场景"""
     scene_id: str
@@ -83,7 +85,7 @@ class Step0_7ScriptWriting(PipelineStep):
                     "0_6_script_flow.json"
                 )
                 if not os.path.exists(flow_file):
-                    print(f"缺少依赖文件: {flow_file}")
+                    log.info(f"缺少依赖文件: {flow_file}")
                     return False
             return True
     
@@ -106,7 +108,7 @@ class Step0_7ScriptWriting(PipelineStep):
     def _run_single_episode(self, episode_id: str) -> Dict[str, Any]:
         """处理单个剧集"""
         start_time = time.time()
-        print(f"Step0.7: 处理 {episode_id}")
+        log.info(f"Step0.7: 处理 {episode_id}")
         
         # 检查是否已经存在输出文件
         episode_out_dir = self.utils.get_episode_output_dir(self.config.output_dir, episode_id)
@@ -114,7 +116,7 @@ class Step0_7ScriptWriting(PipelineStep):
         analysis_file = os.path.join(episode_out_dir, "0_7_script_analysis.json")
         
         if os.path.exists(script_file) and os.path.exists(analysis_file) and not os.environ.get("FORCE_OVERWRITE"):
-            print(f"✅ {episode_id} 已有Step0.7输出文件，跳过处理")
+            log.info(f"✅ {episode_id} 已有Step0.7输出文件，跳过处理")
             return {"status": "already_exists"}
         
         # 读取Step0.6/0.5 产物（改为消费 script_flow）
@@ -143,6 +145,8 @@ class Step0_7ScriptWriting(PipelineStep):
             # 优先：基于 Step0.6 简化输出 script_flow，通过 LLM 重写为好莱坞风格的方括号 STMF
             if script_flow and stmf_mode == 'bracketed':
                 stmf_content = self._render_from_script_flow_hollywood(script_flow, dialogue_turns, episode_id, model_config, use_video, video_uri)
+                # 日志记录 stmf_content 位置
+                log.info(f"{episode_id}，{stmf_content} 0_7_script.stmf: {script_file}")
                 self.utils.save_text_file(script_file, stmf_content)
                 # 保存分析（简要）
                 analysis = {
@@ -154,7 +158,7 @@ class Step0_7ScriptWriting(PipelineStep):
                 }
                 self.utils.save_json_file(analysis_file, analysis)
                 processing_time = time.time() - start_time
-                print(f"✅ {episode_id} Step0.7 完成 (用时: {processing_time:.2f}秒)")
+                log.info(f"✅ {episode_id} Step0.7 完成 (用时: {processing_time:.2f}秒)")
                 return {"status": "success", "processing_time": round(processing_time, 2), "scenes_count": analysis["scenes_count"], "characters_count": None, "total_dialogues": len(dialogue_turns)}
             
             # 否则：使用现有生成/规范化逻辑（兼容保留）
@@ -170,10 +174,10 @@ class Step0_7ScriptWriting(PipelineStep):
             self.utils.save_text_file(script_file, normalized_stmf)
             self.utils.save_json_file(analysis_file, script_result.dict())
             processing_time = time.time() - start_time
-            print(f"✅ {episode_id} Step0.7 完成 (用时: {processing_time:.2f}秒)")
+            log.info(f"✅ {episode_id} Step0.7 完成 (用时: {processing_time:.2f}秒),{script_file}保存了STMF文件")
             return {"status": "success", "processing_time": round(processing_time, 2), "scenes_count": len(script_result.scenes), "characters_count": None, "total_dialogues": len(dialogue_turns)}
         except Exception as e:
-            print(f"❌ {episode_id} Step0.7 失败: {e}")
+            log.info(f"❌ {episode_id} Step0.7 失败: {e}")
             return {"status": "failed", "error": str(e)}
 
     def _write_script(self, plot_data: Dict, dialogue_turns: List[Dict], 
@@ -391,6 +395,9 @@ class Step0_7ScriptWriting(PipelineStep):
             kwargs['video_uri'] = video_uri
 
         result = self.client.generate_content(**kwargs)
+
+        # debug: 打印完整响应内容
+        log.debug(f"剧本撰写响应: {result}")
         
         # 验证和转换结果
         return self._validate_and_convert_result(result, episode_id)
@@ -469,7 +476,7 @@ class Step0_7ScriptWriting(PipelineStep):
             return EpisodeScript(**result)
             
         except Exception as e:
-            print(f"Warning: 结果验证失败，使用默认值: {e}")
+            log.info(f"Warning: 结果验证失败，使用默认值: {e}")
             # 返回默认结构
             return EpisodeScript(
                 meta=ScriptMeta(
@@ -1225,8 +1232,8 @@ class Step0_7ScriptWriting(PipelineStep):
         
         # 调试信息：检查 Prompt 长度
         prompt_chars = len(prompt)
-        print(f"单场景 Prompt 总字符数: {prompt_chars}")
-        print(f"单场景输入数据字符数: {len(formatted_input)}")
+        log.info(f"单场景 Prompt 总字符数: {prompt_chars}")
+        log.info(f"单场景输入数据字符数: {len(formatted_input)}")
 
         schema = {"type": "STRING"}
         kwargs = {
@@ -1241,6 +1248,8 @@ class Step0_7ScriptWriting(PipelineStep):
             kwargs['video_uri'] = video_uri
 
         content = self.client.generate_content(**kwargs)
+        # debug
+        log.debug(f"单场景 LLM原始输出: {content}")
         try:
             text = str(content or '').strip()
             if not text:
@@ -1250,15 +1259,15 @@ class Step0_7ScriptWriting(PipelineStep):
             
             # 调试信息：检查输出长度
             lines = text.split('\n')
-            print(f"单场景 LLM原始输出行数: {len(lines)}")
+            log.info(f"单场景 LLM原始输出行数: {len(lines)}")
             
             # 后处理：标准化并编号场景标题、注入[PAREN]、移除[TRANS]
             result = self._postprocess_stmf(script_flow, episode_id, text)
             result_lines = result.split('\n')
-            print(f"单场景后处理输出行数: {len(result_lines)}")
+            log.info(f"单场景后处理输出行数: {len(result_lines)}")
             return result
         except Exception as e:
-            print(f"单场景处理失败: {e}")
+            log.info(f"单场景处理失败: {e}")
             return ""
     
     def _run_all_episodes(self) -> Dict[str, Any]:
@@ -1266,7 +1275,7 @@ class Step0_7ScriptWriting(PipelineStep):
         episodes = self.utils.get_episode_list(self.config.project_root)
         results = []
         
-        print(f"开始Step0.7: 处理 {len(episodes)} 个剧集...")
+        log.info(f"开始Step0.7: 处理 {len(episodes)} 个剧集...")
         
         # 获取并行配置：步骤级 -> 全局 -> 默认 3
         step_conf_exact = self._get_this_step_config()
@@ -1289,7 +1298,7 @@ class Step0_7ScriptWriting(PipelineStep):
             max_workers = 3
         if not max_workers or max_workers < 1:
             max_workers = 1
-        print(f"使用 {max_workers} 个并行线程处理...")
+        log.info(f"使用 {max_workers} 个并行线程处理...")
         
         # 使用并行处理
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -1306,7 +1315,7 @@ class Step0_7ScriptWriting(PipelineStep):
                     result = future.result()
                     results.append(result)
                 except Exception as e:
-                    print(f"Step0.7 处理 {episode_id} 失败: {e}")
+                    log.info(f"Step0.7 处理 {episode_id} 失败: {e}")
                     results.append({
                         "episode_id": episode_id, 
                         "status": "failed", 
@@ -1315,16 +1324,16 @@ class Step0_7ScriptWriting(PipelineStep):
         
         # 生成统计报告
         stats = self._generate_statistics(results)
-        print(f"\n📊 Step0.7 处理完成统计:")
-        print(f"   总剧集数: {stats['total_episodes']}")
-        print(f"   成功处理: {stats['success_count']}")
-        print(f"   已存在: {stats['already_exists_count']}")
-        print(f"   失败: {stats['failed_count']}")
-        print(f"   总场景数: {stats['total_scenes']}")
-        print(f"   总对话数: {stats['total_dialogues']}")
-        print(f"   总处理时间: {stats['total_processing_time']} 秒")
-        print(f"   平均处理时间: {stats['avg_processing_time']} 秒/episode")
-        print(f"   并行线程数: {max_workers}")
+        log.info(f"\n📊 Step0.7 处理完成统计:")
+        log.info(f"   总剧集数: {stats['total_episodes']}")
+        log.info(f"   成功处理: {stats['success_count']}")
+        log.info(f"   已存在: {stats['already_exists_count']}")
+        log.info(f"   失败: {stats['failed_count']}")
+        log.info(f"   总场景数: {stats['total_scenes']}")
+        log.info(f"   总对话数: {stats['total_dialogues']}")
+        log.info(f"   总处理时间: {stats['total_processing_time']} 秒")
+        log.info(f"   平均处理时间: {stats['avg_processing_time']} 秒/episode")
+        log.info(f"   并行线程数: {max_workers}")
         
         return {
             "status": "completed",

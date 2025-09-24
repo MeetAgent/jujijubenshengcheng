@@ -8,6 +8,7 @@ import json
 from google import genai
 from google.genai import types as gat
 from google.oauth2 import service_account
+from new_pipeline.steps.commont_log import log
 
 
 class Step0_3GlobalAlignmentLLM(PipelineStep):
@@ -44,14 +45,14 @@ class Step0_3GlobalAlignmentLLM(PipelineStep):
 
     def run(self) -> Dict[str, Any]:
         # 使用真实数据的版本
-        print("🔍 使用真实剧集数据的step0.3：直接调用Google GenAI API")
+        log.info("🔍 使用真实剧集数据的step0.3：直接调用Google GenAI API")
         
         # 1. 读取预处理数据（从配置的输出根目录获取，而非硬编码）
         output_root = self.config.project_root or self.config.output_dir
         preprocessed_file = os.path.join(output_root, 'global', '0_3_preprocessed_data.json')
         
         if not os.path.exists(preprocessed_file):
-            print("❌ 预处理数据文件不存在，正在自动聚合生成...")
+            log.info("❌ 预处理数据文件不存在，正在自动聚合生成...")
             base_dir = output_root
             import glob
             clues = sorted(glob.glob(os.path.join(base_dir, 'episode_*', '0_2_clues.json')))
@@ -66,17 +67,17 @@ class Step0_3GlobalAlignmentLLM(PipelineStep):
                             'data': j
                         })
                 except Exception as e:
-                    print(f"⚠️ 读取线索失败 {fp}: {e}")
+                    log.info(f"⚠️ 读取线索失败 {fp}: {e}")
                 continue
             os.makedirs(os.path.dirname(preprocessed_file), exist_ok=True)
             with open(preprocessed_file, 'w', encoding='utf-8') as f:
                 json.dump({'episodes': episodes}, f, ensure_ascii=False, indent=2)
-            print(f"✅ 已生成预处理文件: {preprocessed_file}，共 {len(episodes)} 集")
+            log.info(f"✅ 已生成预处理文件: {preprocessed_file}，共 {len(episodes)} 集")
         
         with open(preprocessed_file, 'r', encoding='utf-8') as f:
             preprocessed_data = json.load(f)
         
-        print(f"✅ 读取预处理数据：{len(preprocessed_data.get('episodes', []))} 个剧集")
+        log.info(f"✅ 读取预处理数据：{len(preprocessed_data.get('episodes', []))} 个剧集")
         
         # 2. 构建真实的prompt
         real_prompt = self._build_real_prompt(preprocessed_data)
@@ -179,23 +180,25 @@ class Step0_3GlobalAlignmentLLM(PipelineStep):
                 )
             )
             
-            print(f"📥 收到原始响应，类型: {type(raw_response)}")
+            log.info(f"📥 收到原始响应，类型: {type(raw_response)}")
+            # 增加日志打印全部的响应内容，用于调试。这个地方使用debug模式打印
+            log.debug(f"原始响应内容: {raw_response}")
             
             # 直接解析响应
             if hasattr(raw_response, 'text') and raw_response.text:
                 try:
                     result = json.loads(raw_response.text)
-                    print(f"✅ JSON解析成功：{len(result.get('characters', []))} 个角色")
+                    log.info(f"✅ JSON解析成功：{len(result.get('characters', []))} 个角色")
                 except json.JSONDecodeError as e:
-                    print(f"⚠️ JSON解析失败: {e}")
-                    print(f"原始文本: {raw_response.text[:500]}...")
+                    log.info(f"⚠️ JSON解析失败: {e}")
+                    log.info(f"原始文本: {raw_response.text[:500]}...")
                     result = {
                         "characters": [],
                         "relationships": [],
                         "per_episode": []
                     }
             else:
-                print("❌ 响应没有text内容")
+                log.info("❌ 响应没有text内容")
                 result = {
                     "characters": [],
                     "relationships": [],
@@ -203,7 +206,7 @@ class Step0_3GlobalAlignmentLLM(PipelineStep):
                 }
             
         except Exception as e:
-            print(f"❌ 直接API调用失败: {e}")
+            log.info(f"❌ 直接API调用失败: {e}")
             result = {
                 "characters": [],
                 "relationships": [],
@@ -212,6 +215,9 @@ class Step0_3GlobalAlignmentLLM(PipelineStep):
         
         # 结果规范化，确保字段与后续步骤兼容
         result = self._normalize_result(result)
+
+        # debug: 打印规范化后的结果
+        log.debug(f"规范化后的结果: {result}")
         
         # 保存结果
         global_dir = os.path.join(output_root, 'global')
@@ -266,9 +272,9 @@ class Step0_3GlobalAlignmentLLM(PipelineStep):
                             'evidence': h.get('rationale') or ''
                         })
         except Exception as e:
-            print(f"⚠️ 导出CSV时出现问题: {e}")
+            log.info(f"⚠️ 导出CSV时出现问题: {e}")
         
-        print(f"✅ {self.step_name} 完成: {output_file}")
+        log.info(f"✅ {self.step_name} 完成: {output_file}")
 
         return {
             "status": "completed",

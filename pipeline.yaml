@@ -26,7 +26,7 @@ steps:
   # Step0.3: 全局对齐（LLM）
   step0_3:
     model: "gemini-2.5-flash"
-    max_tokens: 16384  # 适中的 token 限制
+    max_tokens: 65535  # 适中的 token 限制
     temperature: 0.1
   
   # Step0.4: 说话人校准（当前仅回填，不使用 LLM）
@@ -55,7 +55,7 @@ steps:
 
 # 并发配置
 concurrency:
-  max_workers: 4  # 最大并发线程数
+  max_workers: 20  # 最大并发线程数
 
 # 输出格式配置
 output:

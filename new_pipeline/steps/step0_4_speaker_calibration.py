@@ -14,6 +14,7 @@ from typing import Dict, List, Any
 import json
 import re
 
+from new_pipeline.steps.commont_log import log
 
 class Step0_4SpeakerCalibration(PipelineStep):
     """说话人身份校准步骤"""
@@ -49,14 +50,14 @@ class Step0_4SpeakerCalibration(PipelineStep):
                 selected = p
                 break
         if not selected:
-            print("❌ 全局图谱文件不存在，请先运行Step0.3/Step0.3-LLM")
+            log.info("❌ 全局图谱文件不存在，请先运行Step0.3/Step0.3-LLM")
             return {"status": "failed", "error": "全局图谱文件不存在"}
         with open(selected, 'r', encoding='utf-8') as f:
             self.global_graph = json.load(f)
         
         # 兼容不同结构：LLM版无 relationships 字段时安全打印
         rels = self.global_graph.get('relationships', [])
-        print(f"✅ 加载全局图谱: {len(self.global_graph.get('characters', []))} 个角色, {len(rels)} 个关系 | 文件: {os.path.relpath(selected, self.config.project_root)}")
+        log.info(f"✅ 加载全局图谱: {len(self.global_graph.get('characters', []))} 个角色, {len(rels)} 个关系 | 文件: {os.path.relpath(selected, self.config.project_root)}")
         
         return self._run_all_episodes()
     
@@ -64,7 +65,7 @@ class Step0_4SpeakerCalibration(PipelineStep):
         """处理所有剧集"""
         episodes = self.utils.get_episode_list(self.config.project_root)
         results = []
-        print(f"开始{self.step_name}: 处理 {len(episodes)} 个剧集...")
+        log.info(f"开始{self.step_name}: 处理 {len(episodes)} 个剧集...")
         
         # 并发配置：步骤级 -> 全局 -> 默认 2
         step_conf = self.config.get_step_config_by_name('step0_4') or {}
@@ -78,7 +79,7 @@ class Step0_4SpeakerCalibration(PipelineStep):
             max_workers = 2
         if max_workers < 1:
             max_workers = 1
-        print(f"使用 {max_workers} 个并行线程处理...")
+        log.info(f"使用 {max_workers} 个并行线程处理...")
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_episode = {
@@ -93,7 +94,7 @@ class Step0_4SpeakerCalibration(PipelineStep):
                     result["episode_id"] = episode_id
                     results.append(result)
                 except Exception as e:
-                    print(f"❌ {self.step_name} 处理 {episode_id} 失败: {e}")
+                    log.info(f"❌ {self.step_name} 处理 {episode_id} 失败: {e}")
                     results.append({
                         "episode_id": episode_id, 
                         "status": "failed", 
@@ -101,12 +102,12 @@ class Step0_4SpeakerCalibration(PipelineStep):
                     })
         
         stats = self._generate_statistics(results)
-        print(f"\n📊 {self.step_name} 处理完成统计:")
-        print(f"   总剧集数: {stats['total_episodes']}")
-        print(f"   成功处理: {stats['success_count']}")
-        print(f"   失败处理: {stats['failed_count']}")
-        print(f"   成功率: {stats['success_rate']:.1f}%")
-        print(f"   总校准对话数: {stats['total_calibrated_dialogues']}")
+        log.info(f"\n📊 {self.step_name} 处理完成统计:")
+        log.info(f"   总剧集数: {stats['total_episodes']}")
+        log.info(f"   成功处理: {stats['success_count']}")
+        log.info(f"   失败处理: {stats['failed_count']}")
+        log.info(f"   成功率: {stats['success_rate']:.1f}%")
+        log.info(f"   总校准对话数: {stats['total_calibrated_dialogues']}")
         
         return {
             "status": "completed", 
@@ -116,12 +117,12 @@ class Step0_4SpeakerCalibration(PipelineStep):
     
     def _run_single_episode(self, episode_id: str) -> Dict[str, Any]:
         """处理单个剧集"""
-        print(f"{self.step_name}: 处理 {episode_id}")
+        log.info(f"{self.step_name}: 处理 {episode_id}")
         
         # 检查是否已有输出文件
         output_file = f"{self.config.project_root}/{episode_id}/0_4_calibrated_dialogue.txt"
         if os.path.exists(output_file) and not os.getenv('FORCE_OVERWRITE'):
-            print(f"✅ {episode_id} 已有{self.step_name}输出文件，跳过处理")
+            log.info(f"✅ {episode_id} 已有{self.step_name}输出文件，跳过处理")
             return {"status": "already_exists"}
         
         # 检查输入文件
@@ -130,7 +131,7 @@ class Step0_4SpeakerCalibration(PipelineStep):
         if not os.path.exists(asr_file):
             asr_file = f"{self.config.project_root}/{episode_id}/0_1_timed_dialogue.txt"
         if not os.path.exists(asr_file):
-            print(f"❌ {episode_id} 缺少ASR输入文件: {asr_file}")
+            log.info(f"❌ {episode_id} 缺少ASR输入文件: {asr_file}")
             return {"status": "failed", "error": "缺少ASR输入文件"}
         
         # 获取视频URI
@@ -195,7 +196,7 @@ class Step0_4SpeakerCalibration(PipelineStep):
         # 直接输出回填结果（不调用LLM）
         output_file = f"{self.config.project_root}/{episode_id}/0_4_calibrated_dialogue.txt"
         self.utils.save_text_file(output_file, draft_text)
-        print(f"✅ {episode_id} {self.step_name} 回填完成（无LLM）")
+        log.info(f"✅ {episode_id} {self.step_name} 回填完成（无LLM）")
 
         # 统计
         calibrated_count = self._count_original_dialogues(draft_text)
@@ -264,10 +265,10 @@ class Step0_4SpeakerCalibration(PipelineStep):
                         evidence = h.get('evidence', '')
                         summary_lines.append(f"- {spk} → {cand} (置信度:{conf}): {evidence}")
                     
-                    print(f"✅ 从当集文件构建角色摘要: {ep_hints_csv}")
+                    log.info(f"✅ 从当集文件构建角色摘要: {ep_hints_csv}")
                     return "\n".join(summary_lines)
                 except Exception as e:
-                    print(f"⚠️ 读取当集文件失败: {e}")
+                    log.info(f"⚠️ 读取当集文件失败: {e}")
             return False
         
         # 2. 回退到全局图谱
@@ -298,7 +299,7 @@ class Step0_4SpeakerCalibration(PipelineStep):
                 if aliases:
                     summary_lines.append(f"  别名: {', '.join(aliases)}")
         
-        print(f"✅ 从全局图谱构建角色摘要")
+        log.info(f"✅ 从全局图谱构建角色摘要")
         return "\n".join(summary_lines)
     
     def _count_calibrated_dialogues(self, content: str) -> int:
@@ -466,10 +467,10 @@ class Step0_4SpeakerCalibration(PipelineStep):
                             elif not spk.startswith('['):
                                 mapping.setdefault(f'[{spk}]', cand)
                 
-                print(f"✅ 从当集文件加载映射: {ep_hints_csv} ({len(mapping)} 条)")
+                log.info(f"✅ 从当集文件加载映射: {ep_hints_csv} ({len(mapping)} 条)")
                 return mapping
             except Exception as e:
-                print(f"⚠️ 读取当集文件失败: {e}")
+                log.info(f"⚠️ 读取当集文件失败: {e}")
         
         # 2. 回退到全局图谱
         if not self.global_graph:
@@ -501,7 +502,7 @@ class Step0_4SpeakerCalibration(PipelineStep):
                     elif not spk.startswith('['):
                         mapping.setdefault(f'[{spk}]', cand)
         
-        print(f"✅ 从全局图谱加载映射: {len(mapping)} 条")
+        log.info(f"✅ 从全局图谱加载映射: {len(mapping)} 条")
         return mapping
 
 
@@ -584,4 +585,4 @@ if __name__ == "__main__":
     config = PipelineConfig()
     step = Step0_4SpeakerCalibration(config)
     result = step.run()
-    print(f"最终结果: {result}")
+    log.info(f"最终结果: {result}")
