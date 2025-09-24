@@ -64,7 +64,10 @@ def main() -> int:
 
     # 配置
     config = PipelineConfig()
-    output_root = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "new_pipeline", "output", collection))
+    # 修改输出目录命名方式：输入路径名称 + 集合名称
+    input_basename = os.path.basename(input_dir.rstrip(os.sep))
+    combined_collection_name = f"{input_basename}_{collection}"
+    output_root = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "new_pipeline", "output", combined_collection_name))
     os.makedirs(output_root, exist_ok=True)
 
     # 允许外部覆盖 bucket
