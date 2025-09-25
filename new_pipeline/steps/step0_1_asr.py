@@ -125,8 +125,8 @@ class Step0_1ASR(PipelineStep):
         
         # 优化模型选择策略：优先使用2.5-flash提升速度，禁止1.5系列
         model_list = [
-            'gemini-2.5-flash',  # 优先：速度与质量平衡，适合ASR任务
-            'gemini-2.5-pro',    # 备选：最强推理能力
+            'gemini-2.5-pro',    # 优先：最强推理能力
+            'gemini-2.5-flash',  # 备选：速度与质量平衡，适合ASR任务
             'gemini-2.0-flash'   # 备选方案
         ]
         
