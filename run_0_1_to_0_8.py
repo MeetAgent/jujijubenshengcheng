@@ -182,8 +182,8 @@ def run_step(step_name: str, step_class, config: PipelineConfig, stats: Pipeline
         return False, None, {"error": str(e)}
 
 
-def delete_step_files(config: PipelineConfig, step_name: str, target_episodes: List[str] = None):
-    """删除指定步骤的输出文件"""
+def delete_step_files(config: PipelineConfig, step_name: str, target_episodes: Optional[List[str]] = None):
+    """删除指定步骤及其之后步骤的输出文件"""
     output_root = config.project_root
     
     # 定义每个步骤的预期输出文件
@@ -198,33 +198,42 @@ def delete_step_files(config: PipelineConfig, step_name: str, target_episodes: L
         "0.8": ["0_8_complete_screenplay.fountain", "0_8_complete_screenplay.fdx"]
     }
     
-    if step_name not in expected_files:
+    # 获取所有步骤列表
+    all_steps = list(expected_files.keys())
+    
+    # 找到起始步骤的索引
+    if step_name not in all_steps:
         return
     
-    required_files = expected_files[step_name]
+    start_index = all_steps.index(step_name)
     deleted_count = 0
     
-    if target_episodes:
-        episodes = target_episodes
-    else:
-        episodes = PipelineUtils.get_episode_list(output_root)
-    
-    for episode_id in episodes:
-        for filename in required_files:
-            if step_name == "0.3":  # 全局文件（在 global/ 下）
-                file_path = os.path.join(output_root, "global", filename)
-            elif step_name == "0.8":  # 全局合并文件（集合根目录下）
-                file_path = os.path.join(output_root, filename)
-            else:  # 剧集文件
-                file_path = os.path.join(output_root, episode_id, filename)
-            
-            if os.path.exists(file_path):
-                try:
-                    os.remove(file_path)
-                    deleted_count += 1
-                    log.info(f"🗑️ 删除: {file_path}")
-                except Exception as e:
-                    log.info(f"❌ 删除失败: {file_path} - {e}")
+    # 处理从起始步骤开始的所有步骤
+    for i in range(start_index, len(all_steps)):
+        current_step = all_steps[i]
+        required_files = expected_files[current_step]
+        
+        if target_episodes:
+            episodes = target_episodes
+        else:
+            episodes = PipelineUtils.get_episode_list(output_root)
+        
+        for episode_id in episodes:
+            for filename in required_files:
+                if current_step == "0.3":  # 全局文件（在 global/ 下）
+                    file_path = os.path.join(output_root, "global", filename)
+                elif current_step == "0.8":  # 全局合并文件（集合根目录下）
+                    file_path = os.path.join(output_root, filename)
+                else:  # 剧集文件
+                    file_path = os.path.join(output_root, episode_id, filename)
+                
+                if os.path.exists(file_path):
+                    try:
+                        os.remove(file_path)
+                        deleted_count += 1
+                        log.info(f"🗑️ 删除: {file_path}")
+                    except Exception as e:
+                        log.info(f"❌ 删除失败: {file_path} - {e}")
     
     log.info(f"✅ 删除了 {deleted_count} 个文件")
 
@@ -349,7 +358,7 @@ def interactive_step_selection(config: PipelineConfig) -> tuple:
     log.info("\n🎮 选择执行模式:")
     log.info("1. 从头开始 (重新执行所有步骤)")
     log.info("2. 从指定步骤开始 (跳过已完成的步骤)")
-    log.info("3. 强制重跑指定步骤 (删除现有文件重新执行)")
+    log.info("3. 从指定步骤强制重跑 (删除当前步骤及其之后步骤的文件重新执行)")
     log.info("4. 修复无效文件 (只重跑有问题的文件)")
     
     while True:
@@ -670,5 +679,11 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+
+
+
+
 
 
