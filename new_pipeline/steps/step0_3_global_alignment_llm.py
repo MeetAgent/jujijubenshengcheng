@@ -157,22 +157,23 @@ class Step0_3GlobalAlignmentLLM(PipelineStep):
                 model="gemini-2.5-pro",
                 contents=real_prompt,
                 config=gat.GenerateContentConfig(
-                    system_instruction=(
-                        "你是一位顶级的角色关系分析专家。上游线索可能包含错误/不一致/遗漏。" \
-                        "你的任务：构建全剧统一且可用于后续校准的全球人物图谱，并为每集生成可执行的 speaker_alignment_hints。" \
-                        "\n严格规则：\n" \
-                        "1) 证据优先级：人名条/明确字幕 > 跨集视觉一致性 > 稳定关系网络 > 语义/话语风格。避免过度合并，仅在多条独立证据一致时才合并别名/身份。\n" \
-                        "2) 角色独立性：功能性配角（护卫/助理/司机等）如证据表明是独立个体，应保持独立。不可因称谓（小姐/总）而改写 display_name。\n" \
-                        "3) 高地位约束：具有人名条+头衔且证据充足者视为高地位角色（characters[].is_high_status=true），不得降级为从属。\n" \
-                        "4) 语用原则：严格区分称呼（address）与提及（mention）。address 表示当前对话对象；mention 不建立从属或直接关系。\n" \
-                        "5) spk 标准：speaker_alignment_hints[].spk_full_id 必须为 spk_X_epN（如 spk_0_ep1）。\n" \
-                        "6) 首次出现：给出 first_appearance_episode 与最具代表性的 first_appearance_evidence（一句话证据）。\n" \
-                        "\n输出要求（严格JSON，无解释）：\n" \
-                        "- characters[]: name, description, first_appearance_episode, first_appearance_evidence, is_high_status(boolean), aliases[]\n" \
-                        "- relationships[]: participants[], relationship_type, evidence\n" \
-                        "- per_episode[]: episode_id, supporting[]({label,title_or_role,affiliation_owner,affiliation_type,episode_traits}),\n" \
-                        "  speaker_alignment_hints[]({spk_full_id,candidate,confidence(0-1),sticky,role_type,affiliation_owner,rationale})\n"
-                    ),
+                    system_instruction="""你必须输出完整的 per_episode 数组，即使为空也需包含每个 episode_id。
+                        你是一位顶级的角色关系分析专家。上游线索可能包含错误/不一致/遗漏。你的任务：构建全剧统一且可用于后续校准的全球人物图谱，并为每集生成可执行的 speaker_alignment_hints。
+
+                        严格规则：
+                        1) 证据优先级：人名条/明确字幕 > 跨集视觉一致性 > 稳定关系网络 > 语义/话语风格。避免过度合并，仅在多条独立证据一致时才合并别名/身份。
+                        2) 角色独立性：功能性配角（护卫/助理/司机等）如证据表明是独立个体，应保持独立。不可因称谓（小姐/总）而改写 display_name。
+                        3) 高地位约束：具有人名条+头衔且证据充足者视为高地位角色（characters[].is_high_status=true），不得降级为从属。
+                        4) 语用原则：严格区分称呼（address）与提及（mention）。address 表示当前对话对象；mention 不建立从属或直接关系。
+                        5) spk 标准：speaker_alignment_hints[].spk_full_id 必须为 spk_X_epN（如 spk_0_ep1）。
+                        6) 首次出现：给出 first_appearance_episode 与最具代表性的 first_appearance_evidence（一句话证据）。
+
+                        输出要求（严格JSON，无解释）：
+                        - characters[]: name, description, first_appearance_episode, first_appearance_evidence, is_high_status(boolean), aliases[]
+                        - relationships[]: participants[], relationship_type, evidence
+                        - per_episode[]: episode_id, supporting[]({label,title_or_role,affiliation_owner,affiliation_type,episode_traits}),
+                        speaker_alignment_hints[]({spk_full_id,candidate,confidence(0-1),sticky,role_type,affiliation_owner,rationale})
+""",
                     max_output_tokens=65535,  # 使用最大token限制
                     temperature=0.1,
                     response_mime_type="application/json",
