@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from pydantic import BaseModel
+from new_pipeline.steps.commont_log import log
 
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -67,7 +68,7 @@ class Step0_1ASR(PipelineStep):
         srt_file = os.path.join(episode_out_dir, "0_1_timed_dialogue.srt")
 
         if os.path.exists(json_file) and not os.environ.get("FORCE_OVERWRITE"):
-            print(f"✅ {episode_id} 已有Step0.1输出文件，跳过处理")
+            log.info(f"✅ {episode_id} 已有Step0.1输出文件，跳过处理")
             return {"status": "already_exists"}
 
         # 与 Step1 一致的 GCS 优先策略
@@ -137,10 +138,10 @@ class Step0_1ASR(PipelineStep):
                     model_name = model_list[0]  # 使用主模型
                 else:
                     model_name = model_list[attempt - max_retries + 1]  # 切换备用模型
-                    print(f"🔄 第{attempt+1}次重试，切换模型: {model_name}")
+                    log.info(f"🔄 第{attempt+1}次重试，切换模型: {model_name}")
                 
                 if attempt > 0:
-                    print(f"🔄 第{attempt+1}次重试，使用模型: {model_name}")
+                    log.info(f"🔄 第{attempt+1}次重试，使用模型: {model_name}")
                     import time
                     time.sleep(retry_delay * min(attempt, 3))  # 最大延迟6秒
                 # --- [优化] 修正 max_tokens 参数，避免设置过大 ---
@@ -177,25 +178,25 @@ class Step0_1ASR(PipelineStep):
                 # 解析structured output
                 dialogues = result.get("dialogues", []) if isinstance(result, dict) else []
                 if dialogues and len(dialogues) > 0:
-                    print(f"✅ 第{attempt+1}次调用成功，识别到 {len(dialogues)} 条对话")
+                    log.info(f"✅ 第{attempt+1}次调用成功，识别到 {len(dialogues)} 条对话")
                     # 调试：检查第一个对话的字段
                     if dialogues:
                         first_dialogue = dialogues[0]
-                        print(f"🔍 第一个对话字段: {list(first_dialogue.keys())}")
-                        print(f"🔍 第一个对话内容: {first_dialogue}")
+                        log.info(f"🔍 第一个对话字段: {list(first_dialogue.keys())}")
+                        log.info(f"🔍 第一个对话内容: {first_dialogue}")
                     break
                 else:
-                    print(f"⚠️ 第{attempt+1}次调用成功但解析失败，model={model_name}")
-                    print(f"返回结果: {result}")
+                    log.info(f"⚠️ 第{attempt+1}次调用成功但解析失败，model={model_name}")
+                    log.info(f"返回结果: {result}")
                     if attempt < max_retries + 1:  # 允许更多重试
-                        print("🔄 重试中...")
+                        log.info("🔄 重试中...")
             except Exception as e:
                 error_type = type(e).__name__
-                print(f"❌ 第{attempt+1}次调用异常 ({error_type}): {e}")
+                log.info(f"❌ 第{attempt+1}次调用异常 ({error_type}): {e}")
                 if attempt < max_retries + 1:  # 允许更多重试
-                    print("🔄 重试中...")
+                    log.info("🔄 重试中...")
                 else:
-                    print(f"❌ {episode_id} Step0.1 最终失败: {error_type} - {e}")
+                    log.info(f"❌ {episode_id} Step0.1 最终失败: {error_type} - {e}")
                     result = {"text": ""}
 
         # 最终解析结果（使用structured output）
@@ -207,15 +208,15 @@ class Step0_1ASR(PipelineStep):
         # 保存JSON作为"真相来源"
         with open(json_file, 'w', encoding='utf-8') as f:
             json.dump(processed_dialogues, f, ensure_ascii=False, indent=2)
-        print(f"✅ 已保存详细JSON输出: {json_file}")
+        log.info(f"✅ 已保存详细JSON输出: {json_file}")
 
         # 从JSON生成标准的SRT文件用于调试
         srt_content = self._render_to_srt(processed_dialogues)
         self.utils.save_text_file(srt_file, srt_content)
-        print(f"✅ 已生成SRT调试文件: {srt_file}")
+        log.info(f"✅ 已生成SRT调试文件: {srt_file}")
 
         processing_time = time.time() - start_time
-        print(f"✅ {episode_id} Step0.1 完成 (用时: {processing_time:.2f}秒)")
+        log.info(f"✅ {episode_id} Step0.1 完成 (用时: {processing_time:.2f}秒)")
         return {
             "status": "success", 
             "dialogues_count": len(processed_dialogues),
@@ -226,7 +227,7 @@ class Step0_1ASR(PipelineStep):
     def _run_all_episodes(self) -> Dict[str, Any]:
         episodes = self.utils.get_episode_list(self.config.project_root)
         results = []
-        print(f"开始Step0.1: 处理 {len(episodes)} 个剧集...")
+        log.info(f"开始Step0.1: 处理 {len(episodes)} 个剧集...")
         
         # 获取并行配置，支持从 YAML 配置读取
         # 优先：steps.step0_1.max_workers -> 其次：concurrency.max_workers -> 默认 4
@@ -242,7 +243,7 @@ class Step0_1ASR(PipelineStep):
             max_workers = 4
         if max_workers < 1:
             max_workers = 1
-        print(f"使用 {max_workers} 个并行线程处理...")
+        log.info(f"使用 {max_workers} 个并行线程处理...")
         
         # 使用并行处理
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -260,7 +261,7 @@ class Step0_1ASR(PipelineStep):
                     result["episode_id"] = episode_id
                     results.append(result)
                 except Exception as e:
-                    print(f"❌ Step0.1 处理 {episode_id} 失败: {e}")
+                    log.info(f"❌ Step0.1 处理 {episode_id} 失败: {e}")
                     results.append({
                         "episode_id": episode_id, 
                         "status": "failed", 
@@ -269,13 +270,13 @@ class Step0_1ASR(PipelineStep):
         
         # 生成统计报告
         stats = self._generate_statistics(results)
-        print("\n📊 Step0.1 处理完成统计:")
-        print(f"   总剧集数: {stats['total_episodes']}")
-        print(f"   成功处理: {stats['success_count']}")
-        print(f"   失败处理: {stats['failed_count']}")
-        print(f"   总对话数: {stats['total_dialogues']}")
-        print(f"   平均对话数: {stats['avg_dialogues']:.1f}")
-        print(f"   成功率: {stats['success_rate']:.1f}%")
+        log.info("\n📊 Step0.1 处理完成统计:")
+        log.info(f"   总剧集数: {stats['total_episodes']}")
+        log.info(f"   成功处理: {stats['success_count']}")
+        log.info(f"   失败处理: {stats['failed_count']}")
+        log.info(f"   总对话数: {stats['total_dialogues']}")
+        log.info(f"   平均对话数: {stats['avg_dialogues']:.1f}")
+        log.info(f"   成功率: {stats['success_rate']:.1f}%")
         
         return {
             "status": "completed", 
