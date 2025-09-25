@@ -24,12 +24,12 @@ from new_pipeline.steps.step0_6_plot_extraction import Step0_6PlotExtraction
 from new_pipeline.steps.step0_7_script_writing import Step0_7ScriptWriting
 from new_pipeline.steps.step0_8_final_script import Step0_8FinalScript
 
-from nb_log import get_logger
+from new_pipeline.steps.commont_log import log
 
 from dotenv import load_dotenv
 load_dotenv()
 
-logger = get_logger(__name__)
+
 
 
 class PipelineStats:
@@ -58,16 +58,16 @@ class PipelineStats:
     
     def print_summary(self):
         """打印统计摘要"""
-        print("\n" + "="*60)
-        print("📊 流水线执行统计")
-        print("="*60)
+        log.info("\n" + "="*60)
+        log.info("📊 流水线执行统计")
+        log.info("="*60)
         
         total_duration = time.time() - self.total_start_time
         total_tokens = sum(stats.get("tokens_used", 0) for stats in self.step_stats.values())
         
-        print(f"总执行时间: {total_duration:.2f}秒 ({total_duration/60:.1f}分钟)")
-        print(f"总Token消耗: {total_tokens:,}")
-        print()
+        log.info(f"总执行时间: {total_duration:.2f}秒 ({total_duration/60:.1f}分钟)")
+        log.info(f"总Token消耗: {total_tokens:,}")
+        log.info("")
         
         for step_name, stats in self.step_stats.items():
             duration = stats.get("duration", 0)
@@ -75,9 +75,9 @@ class PipelineStats:
             status = stats.get("status", "unknown")
             status_icon = "✅" if status == "completed" else "❌" if status == "failed" else "⏳"
             
-            print(f"{status_icon} {step_name}: {duration:.2f}秒, {tokens:,} tokens")
+            log.info(f"{status_icon} {step_name}: {duration:.2f}秒, {tokens:,} tokens")
         
-        print("="*60)
+        log.info("="*60)
 
 
 def check_file_integrity(config: PipelineConfig, step_name: str) -> bool:
@@ -99,7 +99,7 @@ def check_file_integrity(config: PipelineConfig, step_name: str) -> bool:
     }
     
     if step_name not in expected_files:
-        print(f"⚠️ 未知步骤: {step_name}")
+        log.info(f"⚠️ 未知步骤: {step_name}")
         return True
     
     required_files = expected_files[step_name]
@@ -128,14 +128,14 @@ def check_file_integrity(config: PipelineConfig, step_name: str) -> bool:
                     missing_files.append(f"{episode_id}/{filename} (损坏: {e})")
     
     if missing_files:
-        print(f"❌ {step_name} 文件完整性检查失败:")
+        log.info(f"❌ {step_name} 文件完整性检查失败:")
         for missing in missing_files[:10]:  # 只显示前10个
-            print(f"   缺少: {missing}")
+            log.info(f"   缺少: {missing}")
         if len(missing_files) > 10:
-            print(f"   ... 还有 {len(missing_files) - 10} 个文件")
+            log.info(f"   ... 还有 {len(missing_files) - 10} 个文件")
         return False
     
-    print(f"✅ {step_name} 文件完整性检查通过")
+    log.info(f"✅ {step_name} 文件完整性检查通过")
     return True
 
 
@@ -148,7 +148,7 @@ def _fail(step: str, result) -> bool:
 
 def run_step(step_name: str, step_class, config: PipelineConfig, stats: PipelineStats) -> tuple[bool, Any, Any]:
     """运行单个步骤，返回 (成功状态, 步骤实例, 结果)"""
-    print(f"\n{step_name}: {step_class.__name__} …")
+    log.info(f"\n{step_name}: {step_class.__name__} …")
     stats.start_step(step_name)
     
     try:
@@ -157,13 +157,13 @@ def run_step(step_name: str, step_class, config: PipelineConfig, stats: Pipeline
         
         # 检查步骤是否成功
         if _fail(step_name, result):
-            print(f"❌ {step_name} 失败: {result}")
+            log.info(f"❌ {step_name} 失败: {result}")
             stats.end_step(step_name, status="failed")
             return False, step_instance, result
         
         # 文件完整性检查
         if not check_file_integrity(config, step_name):
-            print(f"❌ {step_name} 文件完整性检查失败")
+            log.info(f"❌ {step_name} 文件完整性检查失败")
             stats.end_step(step_name, status="failed")
             return False, step_instance, result
         
@@ -173,11 +173,11 @@ def run_step(step_name: str, step_class, config: PipelineConfig, stats: Pipeline
             tokens_used = result.get("tokens_used", 0)
         
         stats.end_step(step_name, tokens_used=tokens_used, status="completed")
-        print(f"✅ {step_name} 完成")
+        log.info(f"✅ {step_name} 完成")
         return True, step_instance, result
         
     except Exception as e:
-        print(f"❌ {step_name} 异常: {e}")
+        log.info(f"❌ {step_name} 异常: {e}")
         stats.end_step(step_name, status="failed")
         return False, None, {"error": str(e)}
 
@@ -222,11 +222,11 @@ def delete_step_files(config: PipelineConfig, step_name: str, target_episodes: L
                 try:
                     os.remove(file_path)
                     deleted_count += 1
-                    print(f"🗑️ 删除: {file_path}")
+                    log.info(f"🗑️ 删除: {file_path}")
                 except Exception as e:
-                    print(f"❌ 删除失败: {file_path} - {e}")
+                    log.info(f"❌ 删除失败: {file_path} - {e}")
     
-    print(f"✅ 删除了 {deleted_count} 个文件")
+    log.info(f"✅ 删除了 {deleted_count} 个文件")
 
 
 def check_invalid_files(config: PipelineConfig, step_name: str) -> List[str]:
@@ -298,9 +298,9 @@ def check_invalid_files(config: PipelineConfig, step_name: str) -> List[str]:
 
 def interactive_step_selection(config: PipelineConfig) -> tuple:
     """互动式步骤选择"""
-    print("\n" + "="*60)
-    print("🎯 互动式流水线配置")
-    print("="*60)
+    log.info("\n" + "="*60)
+    log.info("🎯 互动式流水线配置")
+    log.info("="*60)
     
     # 检查各步骤的文件状态
     steps = [
@@ -314,7 +314,7 @@ def interactive_step_selection(config: PipelineConfig) -> tuple:
         ("0.8", "合并与导出")
     ]
     
-    print("📊 各步骤文件状态检查:")
+    log.info("📊 各步骤文件状态检查:")
     step_status = {}
     for step_num, step_desc in steps:
         invalid_files = check_invalid_files(config, step_num)
@@ -344,66 +344,66 @@ def interactive_step_selection(config: PipelineConfig) -> tuple:
             "valid_count": valid_count,
             "total_count": total_episodes
         }
-        print(f"  {step_num}: {step_desc} - {status}")
+        log.info(f"  {step_num}: {step_desc} - {status}")
     
-    print("\n🎮 选择执行模式:")
-    print("1. 从头开始 (重新执行所有步骤)")
-    print("2. 从指定步骤开始 (跳过已完成的步骤)")
-    print("3. 强制重跑指定步骤 (删除现有文件重新执行)")
-    print("4. 修复无效文件 (只重跑有问题的文件)")
+    log.info("\n🎮 选择执行模式:")
+    log.info("1. 从头开始 (重新执行所有步骤)")
+    log.info("2. 从指定步骤开始 (跳过已完成的步骤)")
+    log.info("3. 强制重跑指定步骤 (删除现有文件重新执行)")
+    log.info("4. 修复无效文件 (只重跑有问题的文件)")
     
     while True:
         try:
             choice = input("\n请选择模式 (1-4): ").strip()
             if choice in ["1", "2", "3", "4"]:
                 break
-            print("❌ 无效选择，请输入 1-4")
+            log.info("❌ 无效选择，请输入 1-4")
         except KeyboardInterrupt:
-            print("\n👋 用户取消")
+            log.info("\n👋 用户取消")
             return None, None, None
     
     if choice == "1":
         return "0.1", "rerun", []
     elif choice == "2":
-        print("\n📋 可用步骤:")
+        log.info("\n📋 可用步骤:")
         for step_num, step_desc in steps:
-            print(f"  {step_num}: {step_desc}")
+            log.info(f"  {step_num}: {step_desc}")
         
         while True:
             try:
                 start_step = input("\n请输入起始步骤 (0.1-0.8): ").strip()
                 if start_step in [s[0] for s in steps]:
                     return start_step, "resume", []
-                print("❌ 无效步骤，请输入 0.1-0.8")
+                log.info("❌ 无效步骤，请输入 0.1-0.8")
             except KeyboardInterrupt:
-                print("\n👋 用户取消")
+                log.info("\n👋 用户取消")
                 return None, None, None
     elif choice == "3":
-        print("\n📋 可重跑的步骤:")
+        log.info("\n📋 可重跑的步骤:")
         for step_num, step_desc in steps:
             status_info = step_status[step_num]
-            print(f"  {step_num}: {step_desc} - {status_info['status']}")
+            log.info(f"  {step_num}: {step_desc} - {status_info['status']}")
         
         while True:
             try:
                 target_step = input("\n请输入要重跑的步骤 (0.1-0.8): ").strip()
                 if target_step in [s[0] for s in steps]:
                     return target_step, "force_rerun", []
-                print("❌ 无效步骤，请输入 0.1-0.8")
+                log.info("❌ 无效步骤，请输入 0.1-0.8")
             except KeyboardInterrupt:
-                print("\n👋 用户取消")
+                log.info("\n👋 用户取消")
                 return None, None, None
     elif choice == "4":
-        print("\n🔧 检测到的问题文件:")
+        log.info("\n🔧 检测到的问题文件:")
         problem_steps = []
         for step_num, step_desc in steps:
             status_info = step_status[step_num]
             if status_info["invalid_files"]:
                 problem_steps.append(step_num)
-                print(f"  {step_num}: {step_desc} - {len(status_info['invalid_files'])} 个问题文件")
+                log.info(f"  {step_num}: {step_desc} - {len(status_info['invalid_files'])} 个问题文件")
         
         if not problem_steps:
-            print("✅ 没有发现问题文件")
+            log.info("✅ 没有发现问题文件")
             return None, None, None
         
         while True:
@@ -411,9 +411,9 @@ def interactive_step_selection(config: PipelineConfig) -> tuple:
                 target_step = input(f"\n请选择要修复的步骤 ({'/'.join(problem_steps)}): ").strip()
                 if target_step in problem_steps:
                     return target_step, "fix_invalid", step_status[target_step]["invalid_files"]
-                print(f"❌ 无效步骤，请从 {problem_steps} 中选择")
+                log.info(f"❌ 无效步骤，请从 {problem_steps} 中选择")
             except KeyboardInterrupt:
-                print("\n👋 用户取消")
+                log.info("\n👋 用户取消")
                 return None, None, None
 
 
@@ -434,6 +434,43 @@ def main() -> int:
                        help="强制重跑指定步骤")
     parser.add_argument("--fix-invalid", action="store_true",
                        help="只修复无效文件")
+    
+    # 检查是否没有传入任何参数
+    if len(sys.argv) == 1:
+        log.info("🎬 剧集剧本生成流水线")
+        log.info("="*60)
+        log.info("📋 使用说明:")
+        log.info("  本工具支持从 Step 0.1 到 Step 0.8 的完整流水线执行")
+        log.info("")
+        log.info("🚀 快速开始:")
+        log.info("  python run_0_1_to_0_8.py --interactive")
+        log.info("  (推荐: 启用互动式模式，引导您完成配置)")
+        log.info("")
+        log.info("⚙️ 主要参数:")
+        log.info("  --interactive           启用互动式模式 (推荐新手使用)")
+        log.info("  --collection NAME       指定输出集合名称")
+        log.info("  --start-step STEP       从指定步骤开始 (0.1-0.8)")
+        log.info("  --force-rerun          强制重跑指定步骤")
+        log.info("  --fix-invalid          只修复无效文件")
+        log.info("  --skip-integrity-check  跳过文件完整性检查")
+        log.info("  --bucket NAME          GCS存储桶名称")
+        log.info("")
+        log.info("📖 使用示例:")
+        log.info("  # 互动式运行 (推荐)")
+        log.info("  python run_0_1_to_0_8.py --interactive")
+        log.info("")
+        log.info("  # 从头开始运行指定集合")
+        log.info("  python run_0_1_to_0_8.py --collection 我的剧本集合")
+        log.info("")
+        log.info("  # 从指定步骤开始")
+        log.info("  python run_0_1_to_0_8.py --collection 我的剧本集合 --start-step 0.5")
+        log.info("")
+        log.info("  # 强制重跑某个步骤")
+        log.info("  python run_0_1_to_0_8.py --collection 我的剧本集合 --start-step 0.6 --force-rerun")
+        log.info("")
+        log.info("💡 提示: 使用 --help 查看完整参数说明")
+        log.info("="*60)
+        return 0
     
     args = parser.parse_args()
     
@@ -463,23 +500,23 @@ def main() -> int:
         except FileNotFoundError:
             candidates = []
         if not candidates:
-            print("❌ 未找到可用集合目录，请使用 --collection 指定或先生成输出")
+            log.info("❌ 未找到可用集合目录，请使用 --collection 指定或先生成输出")
             return 1
-        print("\n📂 可用集合目录：")
+        log.info("\n📂 可用集合目录：")
         for idx, name in enumerate(candidates, 1):
-            print(f"  {idx}. {name}")
+            log.info(f"  {idx}. {name}")
         while True:
             try:
                 sel = input("\n请输入要使用的集合编号: ").strip()
                 if sel.isdigit() and 1 <= int(sel) <= len(candidates):
                     collection = candidates[int(sel) - 1]
                     break
-                print("❌ 无效选择，请输入有效编号")
+                log.info("❌ 无效选择，请输入有效编号")
             except KeyboardInterrupt:
-                print("\n👋 用户取消")
+                log.info("\n👋 用户取消")
                 return 1
     if not collection:
-        print("❌ 缺少集合名称，请使用 --collection 参数或设置 STEP0_COLLECTION 环境变量")
+        log.info("❌ 缺少集合名称，请使用 --collection 参数或设置 STEP0_COLLECTION 环境变量")
         return 1
 
     # 配置
@@ -505,7 +542,7 @@ def main() -> int:
     config.config["project"]["output_dir"] = output_root
 
     # 检查输入目录，root_dir
-    logger.info(f"项目根目录: {config.project_root}, 输出目录: {config.output_dir}")
+    log.info(f"项目根目录: {config.project_root}, 输出目录: {config.output_dir}")
 
 
     # 互动式模式处理
@@ -523,24 +560,24 @@ def main() -> int:
             # 检查无效文件
             invalid_episodes = check_invalid_files(config, start_step)
             if not invalid_episodes:
-                print(f"✅ 步骤 {start_step} 没有无效文件")
+                log.info(f"✅ 步骤 {start_step} 没有无效文件")
                 return 0
             target_episodes = invalid_episodes
         else:
             mode = "resume"
         target_episodes = []
 
-    print("="*60)
-    print("🎬 剧集剧本生成流水线")
-    print("="*60)
-    print(f"输出目录: {output_root}")
-    print(f"集合名称: {collection}")
-    print(f"起始步骤: {start_step}")
-    print(f"执行模式: {mode}")
-    print(f"跳过完整性检查: {args.skip_integrity_check}")
+    log.info("="*60)
+    log.info("🎬 剧集剧本生成流水线")
+    log.info("="*60)
+    log.info(f"输出目录: {output_root}")
+    log.info(f"集合名称: {collection}")
+    log.info(f"起始步骤: {start_step}")
+    log.info(f"执行模式: {mode}")
+    log.info(f"跳过完整性检查: {args.skip_integrity_check}")
     if target_episodes:
-        print(f"目标剧集: {len(target_episodes)} 个")
-    print("="*60)
+        log.info(f"目标剧集: {len(target_episodes)} 个")
+    log.info("="*60)
 
     # 初始化统计
     stats = PipelineStats()
@@ -564,17 +601,17 @@ def main() -> int:
             start_index = i
             break
     else:
-        print(f"❌ 无效的起始步骤: {start_step}")
-        print(f"可用步骤: {', '.join([s[0] for s in steps])}")
+        log.info(f"❌ 无效的起始步骤: {start_step}")
+        log.info(f"可用步骤: {', '.join([s[0] for s in steps])}")
         return 1
     
     # 处理强制重跑模式
     if mode == "force_rerun":
-        print(f"🗑️ 强制重跑模式：删除步骤 {start_step} 的现有文件...")
-        print("⚠️ 注意：强制重跑将删除现有文件，请确保已备份重要数据")
+        log.info(f"🗑️ 强制重跑模式：删除步骤 {start_step} 的现有文件...")
+        log.info("⚠️ 注意：强制重跑将删除现有文件，请确保已备份重要数据")
         delete_step_files(config, start_step, target_episodes)
     
-    print(f"从步骤 {start_step} 开始执行 ({mode} 模式)...")
+    log.info(f"从步骤 {start_step} 开始执行 ({mode} 模式)...")
     
     # 初始化报告生成器
     report_generator = PipelineReportGenerator(config)
@@ -605,28 +642,28 @@ def main() -> int:
             report_generator.record_step_end(step_name, step_result, client)
             
             if not success:
-                print(f"\n❌ 流水线在步骤 {step_num} 失败")
+                log.info(f"\n❌ 流水线在步骤 {step_num} 失败")
                 stats.print_summary()
                 return 1
         
-        print("\n🎉 全流程完成")
+        log.info("\n🎉 全流程完成")
         stats.print_summary()
         
         # 生成运行报告
         try:
             report_file = report_generator.generate_report(config.output_dir)
-            print(f"\n📊 运行报告已生成: {report_file}")
+            log.info(f"\n📊 运行报告已生成: {report_file}")
         except Exception as e:
-            print(f"\n⚠️ 报告生成失败: {e}")
+            log.info(f"\n⚠️ 报告生成失败: {e}")
         
         return 0
 
     except KeyboardInterrupt:
-        print("\n⚠️ 用户中断执行")
+        log.info("\n⚠️ 用户中断执行")
         stats.print_summary()
         return 1
     except Exception as e:
-        print(f"\n❌ 运行异常: {e}")
+        log.info(f"\n❌ 运行异常: {e}")
         stats.print_summary()
         return 1
 
