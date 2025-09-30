@@ -3,6 +3,7 @@ Step0.6: 情节提取
 基于Step0.5的融合对话分析结果，提取结构化情节信息
 """
 
+from logging import config
 import os
 import re
 import time
@@ -74,6 +75,8 @@ class EpisodeScriptFlow(BaseModel):
     episode_id: str
     title: str
     scenes: List[SimpleScene]
+
+
 
 class Step0_6PlotExtraction(PipelineStep):
     """Step0.6: 情节提取"""
@@ -249,7 +252,7 @@ class Step0_6PlotExtraction(PipelineStep):
             }
 
         except Exception as e:
-            log.info(f"❌ {episode_id} Step0.6 失败: {e}")
+            log.exception(f"❌ {episode_id} Step0.6 失败: {e}")
             return {"status": "failed", "error": str(e)}
     
     # (已移除未使用的情节结构提取大Prompt与对应验证方法)
@@ -267,8 +270,12 @@ class Step0_6PlotExtraction(PipelineStep):
     def _extract_script_flow(self, dialogue_turns: List[Dict], video_uri: str,
                              model_config: Dict, episode_id: str,
                              first_appearance_names: Optional[set] = None) -> EpisodeScriptFlow:
+        
         """使用LLM提取面向剧本的场景事件流（增强：情感化ACTION与对白parenthetical）。"""
-
+        # ========== 在这里添加：读取 video_fps 配置 ==========
+        step_conf = self._get_this_step_config()
+        video_fps = step_conf.get('video_fps', 1)  # 如果未配置则为 1fps.
+        # =====================================================
         system_instruction = (
             "你是一位专业的剧本作家（Screenwriter）。你的任务是将视频和带有说话人标识的对话稿，"
             "转换成一个清晰、线性的剧本草稿（JSON）。必须严格基于【视频画面/已有台词】证据生成：\n"
@@ -414,7 +421,8 @@ class Step0_6PlotExtraction(PipelineStep):
             system_instruction=system_instruction,
             schema=schema,
             max_tokens=model_config.get('max_tokens', 65535),
-            temperature=model_config.get('temperature', 0.1)
+            temperature=model_config.get('temperature', 0.1),
+            video_fps=video_fps
         )
 
         # debug, 记录LLM原始输出

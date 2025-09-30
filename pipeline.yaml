@@ -46,6 +46,7 @@ steps:
     model: "gemini-2.5-flash"
     max_tokens: 65535
     temperature: 0.1
+    video_fps: 5  # 每秒x帧,fps越大耗时越久
   
   # Step0.7: 剧本撰写
   step0_7:
