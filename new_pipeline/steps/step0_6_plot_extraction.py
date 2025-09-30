@@ -3,7 +3,6 @@ Step0.6: 情节提取
 基于Step0.5的融合对话分析结果，提取结构化情节信息
 """
 
-from logging import config
 import os
 import re
 import time
@@ -12,8 +11,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from pydantic import BaseModel, Field
 
-from core import PipelineConfig, GenAIClient, PipelineUtils
-from core.exceptions import StepDependencyError, ModelCallError
 from . import PipelineStep
 
 from new_pipeline.steps.commont_log import log
@@ -92,12 +89,11 @@ class Step0_6PlotExtraction(PipelineStep):
     def _get_this_step_config(self) -> Dict[str, Any]:
         """精确获取当前步骤在pipeline.yaml中的配置，避免与step6混淆"""
         try:
-            steps = getattr(self.config, 'steps_config', None) or {}
-            # 优先通过显式键
-            for key in ['step0_6', '0_6']:
-                if key in steps:
-                    sc = steps[key]
-                    if sc.get('name') == self.step_name:
+            steps = getattr(self.config, 'config', {}).get('steps', {}) or {}
+            for key in ['step0_6', '0_6', self.step_name]:
+                sc = steps.get(key)
+                if isinstance(sc, dict):
+                    if key == 'step0_6' or sc.get('name') == self.step_name:
                         return sc
             # 退化：遍历匹配name
             for sc in steps.values():
@@ -105,10 +101,20 @@ class Step0_6PlotExtraction(PipelineStep):
                     return sc
         except Exception:
             pass
+
+        # 兜底：使用 PipelineConfig 提供的接口
+        for fallback in (
+            self.config.get_step_config_by_name('step0_6'),
+            self.config.get_step_config(6),
+            self.config.get_step_config_by_name(self.step_name),
+        ):
+            if isinstance(fallback, dict) and fallback:
+                return fallback
+
         # 最后兜底返回空字典
         return {}
     
-    def check_dependencies(self, episode_id: str = None) -> bool:
+    def check_dependencies(self, episode_id: Optional[str] = None) -> bool:
         """检查依赖"""
         if episode_id:
             # 检查Step0.5的输出
@@ -127,7 +133,7 @@ class Step0_6PlotExtraction(PipelineStep):
                     return False
             return True
     
-    def get_output_files(self, episode_id: str = None) -> List[str]:
+    def get_output_files(self, episode_id: Optional[str] = None) -> List[str]:
         """获取输出文件列表"""
         if episode_id:
             return [
@@ -136,7 +142,7 @@ class Step0_6PlotExtraction(PipelineStep):
             ]
         return []
     
-    def run(self, episode_id: str = None) -> Dict[str, Any]:
+    def run(self, episode_id: Optional[str] = None) -> Dict[str, Any]:
         """运行情节提取步骤"""
         if episode_id:
             return self._run_single_episode(episode_id)
@@ -182,32 +188,8 @@ class Step0_6PlotExtraction(PipelineStep):
             'max_tokens': step_conf_exact.get('max_tokens', 65535),
             'temperature': step_conf_exact.get('temperature', 0.1)
         }
+        log.debug(f"使用模型配置: {model_config}")
 
-        # 可选背景：全剧大纲与人物小传
-        bg_outline = ""
-        bg_chars = ""
-        step_conf = step_conf_exact or self.config.get_step_config(6)
-        try:
-            if step_conf.get('use_outline', False):
-                outline_path = os.path.join(self.config.output_dir, 'global', 'series_outline.md')
-                if os.path.exists(outline_path):
-                    bg_outline = self.utils.load_text_file(outline_path)
-            if step_conf.get('use_character_bios', False):
-                # 复用全局图谱中的角色摘要
-                graph_path = os.path.join(self.config.output_dir, 'global', 'global_character_graph_llm.json')
-                if os.path.exists(graph_path):
-                    graph = self.utils.load_json_file(graph_path, {})
-                    chars = graph.get('characters', [])
-                    lines = []
-                    for ch in chars:
-                        name = ch.get('canonical_name', '')
-                        traits = ch.get('traits', '')
-                        aliases = ", ".join(ch.get('aliases', []))
-                        lines.append(f"- {name}｜别名：{aliases}｜特征：{traits}")
-                    bg_chars = "\n".join(lines)
-        except Exception:
-            pass
- 
         # 尝试从 Step0.2 读取“首次出场”提示
         first_appearance_names = set()
         try:
@@ -270,7 +252,7 @@ class Step0_6PlotExtraction(PipelineStep):
     def _extract_script_flow(self, dialogue_turns: List[Dict], video_uri: str,
                              model_config: Dict, episode_id: str,
                              first_appearance_names: Optional[set] = None) -> EpisodeScriptFlow:
-        
+
         """使用LLM提取面向剧本的场景事件流（增强：情感化ACTION与对白parenthetical）。"""
         # ========== 在这里添加：读取 video_fps 配置 ==========
         step_conf = self._get_this_step_config()
@@ -523,8 +505,14 @@ class Step0_6PlotExtraction(PipelineStep):
             except Exception:
                 continue
 
+        safe["episode_id"] = safe.get("episode_id") or episode_id
+        safe["title"] = safe.get("title") or f"{episode_id} 剧本草稿"
         safe["scenes"] = normalized_scenes
-        return EpisodeScriptFlow(**safe)
+        return EpisodeScriptFlow(
+            episode_id=safe["episode_id"],
+            title=safe["title"],
+            scenes=safe["scenes"],
+        )
 
     def _get_simple_elements_cap(self) -> int:
         """每场景元素数量上限，避免超长输出。"""

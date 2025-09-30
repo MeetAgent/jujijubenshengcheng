@@ -43,7 +43,7 @@ steps:
   
   # Step0.6: 情节提取
   step0_6:
-    model: "gemini-2.5-flash"
+    model: "gemini-2.5-pro"
     max_tokens: 65535
     temperature: 0.1
     video_fps: 5  # 每秒x帧,fps越大耗时越久

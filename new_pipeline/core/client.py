@@ -60,14 +60,12 @@ class GenAIClient:
             
             # 如果指定了 FPS，添加视频元数据
             if video_fps is not None:
+                video_metadata = gat.VideoMetadata(fps=video_fps)
                 video_part = gat.Part(
                     file_data=file_data,
-                    video_metadata=gat.VideoMetadata(
-                        fps=video_fps
-                    )
+                    video_metadata=video_metadata
                 )
             else:
-                # 没有指定 FPS，使用默认
                 video_part = gat.Part(file_data=file_data)
             
             parts.append(video_part)
@@ -84,6 +82,10 @@ class GenAIClient:
                 gat.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="OFF"),
             ],
         }
+        
+        # 添加视频采样配置
+        if video_fps is not None:
+            config_kwargs["video_frame_extraction_fps"] = video_fps  # 尝试这个参数名
         
         if thinking_budget is not None:
             config_kwargs["thinking_config"] = gat.ThinkingConfig(
